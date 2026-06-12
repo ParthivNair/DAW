@@ -168,6 +168,50 @@ LLVM clang 22 (`/opt/homebrew/opt/llvm/bin/clang++`) + `-fsanitize=realtime`; `a
 - `asan`: `daw_tests` builds + runs 3/3 green under `-fsanitize=address,undefined`.
 - `git status`: engine submodule NOT dirtied by the RB link.
 
+## 2026-06-11 — Phase 0 Chunk 4: first sound + first render test
+
+First-sound milestone and the prototype render test landed. The deterministic source
+is the engine's **`ToneGeneratorPlugin`** (sine osc, `producesAudioWhenNoAudioInput()`):
+no clip/file/tempo/time-stretch in the path, so the render is bit-stable and the expected
+level is trivial. Shared edit builder `src/engine/SineToneEdit.cpp` is used by both the
+render test and the GUI.
+
+**Gotcha (binds future plugin work):** `ToneGeneratorPlugin` is **NOT** one of the
+engine's default built-in types — `PluginManager::initialise()` omits it — so
+`PluginCache::createNewPlugin("toneGenerator", {})` returns null until you call
+`engine.getPluginManager().createBuiltInType<ToneGeneratorPlugin>()` first
+(idempotent: `registerBuiltInType` skips an already-present type). Also: setting a
+plugin's `CachedValue` (`tone->frequency = …`) does **not** refresh the
+`AutomatableParameter` the DSP reads in `applyToBuffer()`; you must
+`updateFromAttachedValue()` on each parameter (mirrors `restorePluginStateFromValueTree`),
+otherwise the render comes out at the plugin defaults (220 Hz, level 1.0).
+
+**Headless render gotcha:** `Renderer::renderToFile(taskDescription, params)` routes through
+`UIBehaviour::runTaskWithProgressBar`, which never returns under a headless engine with no
+message loop (it hangs). The render helper instead drives a `Renderer::RenderTask` inline
+(`while (task.runJob() == jobNeedsRunningAgain) {}`) — the same thing as Renderer's own
+`useThread=false` path. Tests that construct an `Engine` also need a process-wide
+`juce::ScopedJuceInitialiser_GUI` (a Catch2 listener in `tests/TestMain.cpp`), else JUCE's
+global singletons read as leaked at exit.
+
+**Render-test numbers** (`tests/render/SineRenderTest.cpp`, tag `[render]`, 48 kHz, 1.5 s,
+440 Hz sine at level 0.5): measured RMS **-9.031 dBFS** (expected -9.03 ±0.5; 0.5/√2),
+dominant FFT bin 150 → **439.45 Hz** (expected 440, bin resolution ±2.93 Hz), finite +
+not silent. `ctest --preset dev` and `--preset rtsan` both **10/10 green** (9 old + render);
+the render test is ~1.5 s and clean under `-fsanitize=realtime` (offline render is the
+designed RTSan workload). EZStudio launches, opens the default CoreAudio output
+("Output 1 + 2 @ 44100 Hz"), and auto-plays the looped tone (Play/Stop toggle).
+
+**EditClip recheck — now PASSES (Spike 2 follow-up resolved).** Built the engine's own
+TestRunner from our pinned submodule (Debug, scratch dir `/tmp/te-testrunner-build`) with
+Rubber Band vendored at `modules/3rd_party/rubberband` (CMake logs "Found rubberband,
+enabling"). Headless run: **`[doctest] Status: SUCCESS!` — 54/54 cases, 1027/1027
+assertions, 0 failed**; `tracktion_EditClip.test.cpp` "EditClip" case passes (3.12 s, no
+assertion failures). This confirms the Spike 2 hypothesis: the prior null-test failure
+(nested-edit render RMS diff ≈0.692 vs ≈0 expected) was SoundTouch's processing offset
+breaking sample-aligned cancellation; Rubber Band fixes it. Nested-edit renders can now be
+trusted. (Run was Debug with all benchmarks enabled, hence ~8 min; SHAs unchanged.)
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)

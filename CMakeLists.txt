@@ -124,6 +124,8 @@ endif()
 #  daw_core object file (never duplicated, never in a header).
 add_library(daw_core STATIC
     src/engine/EngineInfo.cpp
+    src/engine/SineToneEdit.cpp
+    src/engine/SineDemoSession.cpp
     src/rt/RealtimeGuard.cpp)
 
 target_include_directories(daw_core PUBLIC
@@ -197,9 +199,15 @@ if(DAW_BUILD_TESTS)
     juce_add_module("${CMAKE_CURRENT_SOURCE_DIR}/libs/melatonin_test_helpers")
 
     add_executable(daw_tests
+        tests/TestMain.cpp
         tests/SanityTest.cpp
         tests/RtSpscQueueTest.cpp
-        tests/RtGuardTest.cpp)
+        tests/RtGuardTest.cpp
+        tests/render/SineRenderTest.cpp)
+
+    # tests/render/ headers include themselves via the "render/" prefix.
+    target_include_directories(daw_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
     target_compile_features(daw_tests PRIVATE cxx_std_20)
 
