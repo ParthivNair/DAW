@@ -119,13 +119,23 @@ endif()
 #  Links daw_engine; this is where my PCH lives (few TUs, no module sources).
 #  EZStudio and daw_tests link daw_core.
 # ============================================================================
-add_library(daw_core STATIC src/engine/EngineInfo.cpp)
+#  src/rt/RealtimeGuard.cpp is the SINGLE TU that replaces global operator
+#  new/delete for the debug allocation tripwire; it must live in exactly one
+#  daw_core object file (never duplicated, never in a header).
+add_library(daw_core STATIC
+    src/engine/EngineInfo.cpp
+    src/rt/RealtimeGuard.cpp)
 
 target_include_directories(daw_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/readerwriterqueue")
 
 target_compile_features(daw_core PUBLIC cxx_std_20)
+
+# RT debug allocation guard: ON in Debug, OFF (zero overhead) otherwise. PUBLIC
+# so consumers (daw_tests) see the same DAW_RT_CHECKS state as the guard TU did.
+target_compile_definitions(daw_core PUBLIC
+    $<IF:$<CONFIG:Debug>,DAW_RT_CHECKS=1,DAW_RT_CHECKS=0>)
 
 target_link_libraries(daw_core PUBLIC daw_engine)
 target_link_libraries(daw_core PRIVATE juce::juce_recommended_warning_flags)
@@ -187,7 +197,9 @@ if(DAW_BUILD_TESTS)
     juce_add_module("${CMAKE_CURRENT_SOURCE_DIR}/libs/melatonin_test_helpers")
 
     add_executable(daw_tests
-        tests/SanityTest.cpp)
+        tests/SanityTest.cpp
+        tests/RtSpscQueueTest.cpp
+        tests/RtGuardTest.cpp)
 
     target_compile_features(daw_tests PRIVATE cxx_std_20)
 
@@ -205,4 +217,25 @@ if(DAW_BUILD_TESTS)
 
     include(Catch)
     catch_discover_tests(daw_tests)
+endif()
+
+# ============================================================================
+#  rt_violation_demo — rtsan NEGATIVE-test target.
+#
+#  Proves the rtsan lane detects a real-time violation: its main() calls an
+#  RT_NONBLOCKING function that heap-allocates, which must abort with an RTSan
+#  diagnostic under -fsanitize=realtime. Built ONLY when the realtime sanitizer
+#  flag is active (the rtsan preset), and deliberately NOT registered with ctest
+#  — it is SUPPOSED to crash, so it must never join the default green suite.
+#  Run it by hand: build/rtsan/rt_violation_demo  (expected: non-zero exit).
+# ============================================================================
+if(CMAKE_CXX_FLAGS MATCHES "-fsanitize=realtime")
+    add_executable(rt_violation_demo tests/rt_violation_demo.cpp)
+    target_compile_features(rt_violation_demo PRIVATE cxx_std_20)
+    # Header-only need: just src/ on the include path for rt/RTAnnotations.h.
+    target_include_directories(rt_violation_demo PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    if(APPLE)
+        target_compile_options(rt_violation_demo PRIVATE "-fno-aligned-allocation")
+    endif()
 endif()
