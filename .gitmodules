@@ -1,6 +1,9 @@
 [submodule "libs/tracktion_engine"]
 	path = libs/tracktion_engine
 	url = https://github.com/Tracktion/tracktion_engine
+	# CMake symlinks libs/rubberband into modules/3rd_party/rubberband at configure
+	# time (single-file Rubber Band build); ignore that so it never dirties status.
+	ignore = untracked
 [submodule "libs/rubberband"]
 	path = libs/rubberband
 	url = https://github.com/breakfastquay/rubberband

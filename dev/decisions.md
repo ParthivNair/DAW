@@ -124,9 +124,53 @@ then, investigate before trusting nested-edit renders.
 confirm audio comes out of the speakers (no programmatic audio/screen capture was available
 in this session).
 
+## 2026-06-11 — Phase 0 Chunk 2: build skeleton (CMake + presets + targets)
+
+App identity (locked): name **EZStudio**, bundle id `com.parthivnair.ezstudio`,
+company "Parthiv Nair". Targets: **EZStudio** (GUI app, `juce_add_gui_app`),
+**daw_core** (STATIC engine glue, my code, ZERO GUI includes), **daw_tests** (Catch2
+console runner, links `daw_core` only). Project name `daw`, C++20, macOS arm64.
+
+**CMake structure decision — the engine compiles into its own PCH-free `daw_engine`
+lib, not into `daw_core`.** JUCE modules amalgamate their sources into whatever target
+links the module *interface* targets, and those amalgamation TUs `#error "Incorrect
+use of JUCE cpp file"` if ANY prefix header (a force-included PCH) precedes them — and
+they mix C++/Objective-C++, which one PCH can't satisfy. So an internal `daw_engine`
+STATIC lib links the tracktion/JUCE modules **PRIVATE** (sources compile there once,
+no PCH) and re-exports them to consumers via `$<LINK_ONLY:tracktion::...>` plus the
+interface include dirs + `TRACKTION_*`/JUCE defines. Result: `daw_core`/`EZStudio`/
+`daw_tests` link the engine's symbols + frameworks WITHOUT recompiling module sources,
+which is exactly what lets `daw_core`/`EZStudio` carry a PCH. `target_precompile_headers`
+uses `__cplusplus`-guarded wrapper headers (`src/engine/DawCorePCH.h`, `src/ui/EZStudioPCH.h`)
+so the C-language PCH CMake also emits (project enables C for JUCE's C TUs) is a no-op.
+No unity builds.
+
+**Rubber Band** wired per Spike 2: configure-time symlink (copy fallback) of
+`libs/rubberband` → `libs/tracktion_engine/modules/3rd_party/rubberband`; defines
+`TRACKTION_ENABLE_TIMESTRETCH_RUBBERBAND=1` + `TRACKTION_BUILD_RUBBERBAND=1` (engine's
+`tracktion_engine.cpp` then `#include`s `<rubberband/single/RubberBandSingle.cpp>`).
+SoundTouch stays on as the A/B fallback. `ignore = untracked` on the `libs/tracktion_engine`
+submodule entry in our `.gitmodules` keeps the link out of `git status`.
+
+Every preset pins `CMAKE_OSX_SYSROOT=…/Xcode.app/…/MacOSX.sdk` (SDK skew, Spike 2);
+Ninja only; `dev` uses ccache + `CMAKE_EXPORT_COMPILE_COMMANDS`; `rtsan` uses Homebrew
+LLVM clang 22 (`/opt/homebrew/opt/llvm/bin/clang++`) + `-fsanitize=realtime`; `asan` uses
+`-fsanitize=address,undefined`.
+
+**Measured (M1 Pro, this machine):**
+- Cold configure (warm build dir): ~4 s; clean configure incl. juceaide + RB link: ~11 s.
+- Cold build, empty ccache, `dev` all targets: **50 s** (158/177 ccache misses).
+- Clean configure+build+test, warm ccache: 4 s + 11 s + 1.2 s; `ctest --preset dev` 3/3 green.
+- **Incremental rebuild of `daw_tests` after touching `src/engine/EngineInfo.cpp`: 2.8 s**
+  (well under the 30 s AI-iteration budget — the 300 MB `daw_engine.a` never recompiles).
+- `rtsan`: cold build of `daw_tests` ~46 s (Homebrew clang, no ccache hits); `ctest --preset
+  rtsan` 3/3 green with `-fsanitize=realtime` intact.
+- `asan`: `daw_tests` builds + runs 3/3 green under `-fsanitize=address,undefined`.
+- `git status`: engine submodule NOT dirtied by the RB link.
+
 ## Pending (fill in when decided)
 
-- App name / bundle identifier: _TBD_
+- ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)
 - ~~Tracktion Engine pinned SHA + JUCE submodule SHA~~: pinned (see 2026-06-11 Spike 2 entry)
 - ~~Semantic-search path GO/NO-GO~~: **GO** (see 2026-06-11 Spike 1 entry)
 - ~~Freesound OAuth2 redirect~~: registered as the paste-the-code page (see Spike 1 entry)
