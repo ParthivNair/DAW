@@ -1,0 +1,83 @@
+name: sanitizers-weekly
+
+# Heavyweight sanitizer lanes run on a weekly cadence (macOS minutes bill 10x, so
+# these stay off the per-push path) plus on-demand via the Actions UI / gh CLI.
+# NOTE: a scheduled workflow only fires once it lives on the default branch, and
+# workflow_dispatch can only target a branch the workflow already exists on — so
+# this activates after this file merges to main.
+on:
+  schedule:
+    # 07:00 UTC every Monday.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: sanitizers-weekly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # ASan + UBSan lane (existing `asan` preset, Apple clang).
+  # ---------------------------------------------------------------------------
+  asan:
+    name: macOS (asan + ubsan)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ccache-asan-macos-14
+
+      - name: Install build tools
+        run: brew install ninja ccache
+
+      - name: Bootstrap submodules (JUCE SSH->HTTPS rewrite + pinned-SHA assert)
+        run: tools/bootstrap.sh
+
+      - name: Configure
+        run: cmake --preset asan
+
+      - name: Build daw_tests
+        run: cmake --build --preset asan --target daw_tests
+
+      - name: Run daw_tests
+        run: build/asan/daw_tests
+
+  # ---------------------------------------------------------------------------
+  # TSan lane (`tsan` preset, Apple clang ships the thread-sanitizer runtime).
+  # ---------------------------------------------------------------------------
+  tsan:
+    name: macOS (tsan)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ccache-tsan-macos-14
+
+      - name: Install build tools
+        run: brew install ninja ccache
+
+      - name: Bootstrap submodules (JUCE SSH->HTTPS rewrite + pinned-SHA assert)
+        run: tools/bootstrap.sh
+
+      - name: Configure
+        run: cmake --preset tsan
+
+      - name: Build
+        run: cmake --build --preset tsan
+
+      - name: Test
+        run: ctest --preset tsan
