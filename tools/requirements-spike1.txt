@@ -1,0 +1,10 @@
+# Deps for the prototyping venv (~/venvs/daw, Python 3.12) — finalized by Spike 1.
+# Note: laion_clap does NOT declare torch/torchvision/torchaudio — install explicitly.
+# Verified working 2026-06-11 on macOS arm64 (transformers 5.x is fine; the script
+# monkeypatches torch.load for torch>=2.6 weights_only default).
+laion_clap==1.1.7
+torch>=2.12
+torchvision
+torchaudio
+requests
+# 'freesound-api' pip package not needed: spike uses raw requests (undocumented params).

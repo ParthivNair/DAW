@@ -16,6 +16,8 @@ compile_commands.json
 __pycache__/
 *.pyc
 .venv/
+tools/spike1_out/
+tools/.freesound_key
 
 # Local-only Claude notes
 CLAUDE.local.md
