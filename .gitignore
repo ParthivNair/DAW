@@ -1,3 +1,23 @@
 .obsidian/
 .DS_Store
 daw-research-prompt.md
+
+# Build output
+build/
+DerivedData/
+*.xcodeproj
+.cache/
+
+# ccache / clangd local state
+.ccache/
+compile_commands.json
+
+# Python (spikes, sidecar)
+__pycache__/
+*.pyc
+.venv/
+
+# Local-only Claude notes
+CLAUDE.local.md
+
+.env
