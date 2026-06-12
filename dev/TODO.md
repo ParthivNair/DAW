@@ -20,17 +20,16 @@ Every phase ends with the app in a usable state and with automated checks Claude
 - [ ] `brew install cmake ninja ccache git-lfs llvm`
   - Homebrew **LLVM ≥ 20** is required for RealtimeSanitizer (`-fsanitize=realtime`) — Apple's bundled clang doesn't ship the realtime runtime. Normal dev builds still use AppleClang.
 - [ ] `git lfs install` (golden-render WAV fixtures will live in LFS)
-- [ ] Install **Python 3.11+** with a venv for prototyping and the later embedding sidecar: `python3 -m venv ~/venvs/daw && pip install laion_clap freesound-api requests` (exact deps finalized in Spike 1)
+- [x] Install **Python 3.11+** with a venv for prototyping and the later embedding sidecar: `~/venvs/daw` (Python 3.12); deps finalized in Spike 1 → `tools/requirements-spike1.txt` (note: torch/torchvision/torchaudio must be installed explicitly; `freesound-api` not needed)
 - [ ] Claude Code: install the official **clangd LSP plugin** (https://claude.com/plugins/clangd-lsp) — clangd comes with the Homebrew LLVM you just installed; the plugin needs `compile_commands.json`, which our CMake preset will export
 
 ### A2. Accounts & credentials
 
 - [ ] Create the **GitHub repository** and push this repo (private is fine; GPL obligations only trigger on distribution)
 - [ ] Enable **GitHub Actions**; be aware macOS runners bill at a **10× minute multiplier** — the CI plan keeps the high-volume loop on Linux if minutes get tight
-- [ ] Register a **Freesound** account, then create API credentials at https://freesound.org/apiv2/apply :
-  - API key (token auth) — enough for search + previews (Phase 3)
-  - OAuth2 client (`client_id` + `client_secret` + redirect URL) — needed for original-quality downloads (Phase 4)
-  - When registering the OAuth2 redirect, try `http://localhost:8080/callback`; if Freesound rejects loopback URLs, we use their documented paste-the-code fallback instead (verified to exist)
+- [x] Register a **Freesound** account, then create API credentials at https://freesound.org/apiv2/apply :
+  - API key (token auth) — done, verified working in Spike 1 (credentials in vault-root `.env`; the client secret is the token-auth key)
+  - OAuth2 client (`client_id` + `client_secret` + redirect URL) — done; redirect registered as Freesound's hosted paste-the-code page (`/home/app_permissions/permission_granted/`), so Phase 4 uses that flow, not a loopback listener
   - Note: rate limits are 60 req/min, 2,000 req/day **per key**; the app will require each user to bring their own key (open-source apps can't embed a secret)
 
 ### A3. Test assets (downloads)
@@ -59,10 +58,10 @@ Every phase ends with the app in a usable state and with automated checks Claude
 
 The plan hinges on an undocumented trick: passing a locally computed CLAP **text** embedding as `similar_to=[...512 floats]&similarity_space=laion_clap` so Freesound's server does semantic nearest-neighbor search (Risk #3).
 
-- [ ] Python script: embed text queries with LAION-CLAP checkpoint **`630k-audioset-fusion-best`** (= HF `laion/clap-htsat-fused` — must match Freesound's server-side model exactly)
-- [ ] Call `GET /apiv2/search/?similar_to=[vec]&similarity_space=laion_clap` with the API key; judge result quality on ~10 varied queries ("vinyl crackle loop", "punchy kick", "rain on tent"...)
-- [ ] Also test while in there: `query` + `similar_to` interaction (undocumented precedence); license filter composition; `GET /sounds/<id>/analysis/` vector retrieval; what license string a pre-2011 Sampling+ sound returns; live docs vs repo-master docs drift
-- [ ] **Record the verdict in `dev/decisions.md`**: semantic path GO / fallback to documented `similar_to=<id>` "more like this" + lexical + descriptor filters (still a strong feature)
+- [x] Python script: embed text queries with LAION-CLAP checkpoint **`630k-audioset-fusion-best`** (= HF `laion/clap-htsat-fused` — must match Freesound's server-side model exactly) — `tools/spike1_freesound_semantic.py`
+- [x] Call `GET /apiv2/search/?similar_to=[vec]&similarity_space=laion_clap` with the API key; judge result quality on ~10 varied queries ("vinyl crackle loop", "punchy kick", "rain on tent"...)
+- [x] Also test while in there: `query` + `similar_to` interaction (undocumented precedence); license filter composition; `GET /sounds/<id>/analysis/` vector retrieval; what license string a pre-2011 Sampling+ sound returns; live docs vs repo-master docs drift
+- [x] **Record the verdict in `dev/decisions.md`**: **GO** — semantic path works live; see the 2026-06-11 Spike 1 entry for quality notes and binding API mechanics (GET-only, 4094-char request line, `query` ignored with `similar_to`, deed-URL license strings)
 
 ### Spike 2 — Engine builds on this machine [CC] · ~½ day
 
