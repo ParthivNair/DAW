@@ -15,11 +15,11 @@ Every phase ends with the app in a usable state and with automated checks Claude
 
 ### A1. Machine / toolchain
 
-- [ ] Install **Xcode** (full app from App Store, not just CLT — needed for the macOS SDK) and run `xcode-select --install`; accept the license (`sudo xcodebuild -license accept`)
-- [ ] Install **Homebrew** (https://brew.sh)
-- [ ] `brew install cmake ninja ccache git-lfs llvm`
+- [x] Install **Xcode** (full app from App Store, not just CLT — needed for the macOS SDK) and run `xcode-select --install`; accept the license (`sudo xcodebuild -license accept`) — Xcode 26.4 verified in Spike 2; **gotcha:** the installed CLT ships a *newer* SDK (macOS 27) than Xcode's clang understands, so builds must pin `CMAKE_OSX_SYSROOT` to Xcode's SDK (see decisions)
+- [x] Install **Homebrew** (https://brew.sh) — 6.0.0 verified
+- [x] `brew install cmake ninja ccache git-lfs llvm` — verified in Spike 2: CMake 4.3.3, Ninja 1.13.2, ccache 4.13.6, Homebrew LLVM present
   - Homebrew **LLVM ≥ 20** is required for RealtimeSanitizer (`-fsanitize=realtime`) — Apple's bundled clang doesn't ship the realtime runtime. Normal dev builds still use AppleClang.
-- [ ] `git lfs install` (golden-render WAV fixtures will live in LFS)
+- [x] `git lfs install` (golden-render WAV fixtures will live in LFS) — global lfs filters verified present
 - [x] Install **Python 3.11+** with a venv for prototyping and the later embedding sidecar: `~/venvs/daw` (Python 3.12); deps finalized in Spike 1 → `tools/requirements-spike1.txt` (note: torch/torchvision/torchaudio must be installed explicitly; `freesound-api` not needed)
 - [ ] Claude Code: install the official **clangd LSP plugin** (https://claude.com/plugins/clangd-lsp) — clangd comes with the Homebrew LLVM you just installed; the plugin needs `compile_commands.json`, which our CMake preset will export
 
@@ -65,9 +65,9 @@ The plan hinges on an undocumented trick: passing a locally computed CLAP **text
 
 ### Spike 2 — Engine builds on this machine [CC] · ~½ day
 
-- [ ] Clone `Tracktion/tracktion_engine` at `develop`, **pin a known-good SHA** (last activity Feb 2026), `git submodule update --init --recursive` (JUCE lives at `modules/juce`)
-- [ ] Build **DemoRunner** with CMake + Ninja; run PlaybackDemo; confirm audio out through CoreAudio
-- [ ] Record in `dev/decisions.md`: engine SHA, JUCE submodule SHA, build time cold/warm, any patches needed
+- [x] Clone `Tracktion/tracktion_engine` at `develop`, **pin a known-good SHA** (last activity Feb 2026), `git submodule update --init --recursive` (JUCE lives at `modules/juce`) — clone lives at `~/src/tracktion_engine`, pinned `2877b621` (engine 3.2.0) + JUCE `7c89e11f` (8.0.12); note: JUCE submodule URL is SSH, needs HTTPS rewrite (see decisions)
+- [x] Build **DemoRunner** with CMake + Ninja; run PlaybackDemo; confirm audio out through CoreAudio — built & launches cleanly; engine TestRunner also built & run headless (52/53 pass). **[You] remaining:** open the running DemoRunner, click PlaybackDemo, confirm you hear audio
+- [x] Record in `dev/decisions.md`: engine SHA, JUCE submodule SHA, build time cold/warm, any patches needed — see the 2026-06-11 Spike 2 entry
 
 ---
 
