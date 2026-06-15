@@ -52,8 +52,14 @@ void SineDemoSession::play()
 
 void SineDemoSession::stop()
 {
-    if (edit != nullptr)
-        edit->getTransport().stop (false, false);
+    if (edit == nullptr)
+        return;
+
+    // The Tone Generator emits whenever the playback graph processes it, regardless
+    // of the playhead — and the engine keeps that graph live when the transport is
+    // merely stopped (for monitoring). So stop with clearDevices=true to tear the
+    // graph down and actually silence the tone; play() re-allocates the context.
+    edit->getTransport().stop (false, /*clearDevices*/ true);
 }
 
 bool SineDemoSession::isPlaying() const

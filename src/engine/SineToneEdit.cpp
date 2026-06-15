@@ -6,13 +6,19 @@ namespace te = tracktion::engine;
 
 namespace daw
 {
-std::unique_ptr<te::Edit> buildSineToneEdit (te::Engine& engine, const SineToneSpec& spec)
+std::unique_ptr<te::Edit> buildSineToneEdit (te::Engine& engine, const SineToneSpec& spec, EditPurpose purpose)
 {
+    // livePlayback -> forEditing creates an EditPlaybackContext so the transport
+    // can drive the output device; forRendering sets playDisabled (no device
+    // output) and is only for the offline render path (RenderTask).
+    const auto role = purpose == EditPurpose::livePlayback ? te::Edit::EditRole::forEditing
+                                                           : te::Edit::EditRole::forRendering;
+
     // Single-track Edit with unity master volume (matches the engine's own test
     // edit). 60 bpm tempo is irrelevant here — the tone source ignores tempo —
     // but we leave the engine defaults and just neutralise gains so the only
     // amplitude in the chain is the Tone Generator's level.
-    auto edit = te::Edit::createSingleTrackEdit (engine, te::Edit::EditRole::forRendering);
+    auto edit = te::Edit::createSingleTrackEdit (engine, role);
     edit->getMasterVolumePlugin()->setVolumeDb (0.0f);
 
     auto track = te::getAudioTracks (*edit)[0];

@@ -39,7 +39,7 @@ TEST_CASE ("440 Hz sine renders to a WAV with the expected RMS and peak frequenc
     // Headless engine: no audio device is ever opened in the render path.
     te::Engine engine { "EZStudio-render-test" };
 
-    auto edit = daw::buildSineToneEdit (engine, { frequencyHz, levelLinear, lengthSecs });
+    auto edit = daw::buildSineToneEdit (engine, { frequencyHz, levelLinear, lengthSecs }, daw::EditPurpose::offlineRender);
     REQUIRE (edit != nullptr);
 
     auto wav = daw::render_test::renderEditToWav (*edit, lengthSecs, sampleRate);
