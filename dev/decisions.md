@@ -212,6 +212,37 @@ assertion failures). This confirms the Spike 2 hypothesis: the prior null-test f
 breaking sample-aligned cancellation; Rubber Band fixes it. Nested-edit renders can now be
 trusted. (Run was Debug with all benchmarks enabled, hence ~8 min; SHAs unchanged.)
 
+## 2026-06-15 — Phase 0 closeout: skeleton complete, CI green
+
+Phase 0 landed in seven verified chunks on branch `claude/goofy-sammet-7d6fd2` (one
+commit each, all gated independently before commit):
+
+1. Vendored pinned submodules under `libs/` + `tools/bootstrap.sh` (JUCE SSH→HTTPS fix) +
+   `THIRD_PARTY_LICENSES.md`.
+2. CMake skeleton: `dev`/`release`/`rtsan`/`asan` presets (all pin the Xcode SDK sysroot),
+   targets `daw_core`/`daw_tests`/`EZStudio`, internal PCH-free `daw_engine` lib, Rubber
+   Band wiring.
+3. `src/rt/` facade: `RT_NONBLOCKING`, SPSC queue wrapper (producer/consumer views,
+   `try_*` only), `RT_CHECK` allocation guard; `tools/rt-tripwire.sh`.
+4. First sound + prototype render test (`tests/render/`, `[render]`); EditClip null test now
+   passes with Rubber Band (Spike 2 hypothesis confirmed — see Chunk 4 entry above).
+5. CI: `build-and-test.yml` (macOS dev + Linux dev + macOS rtsan) + `sanitizers-weekly.yml`
+   (ASan/UBSan + TSan); added a `tsan` preset.
+6. Claude harness: `.clang-format`, PostToolUse clang-format + Stop build/ctest gate hooks,
+   per-dir `CLAUDE.md`, skills `render-test`/`tracktion-api`/`rt-review`.
+
+**Acceptance (all green):**
+- **Fresh clone** of the branch into a temp dir → `tools/bootstrap.sh` → `cmake --preset dev`
+  → build → `ctest --preset dev`: **10/10 first try**.
+- **CI on GitHub Actions** (chunk-5 push): macOS (dev), Linux (dev), macOS (rtsan) all
+  **success**. Cold macOS lanes ~4–5 min; Linux cross-check green.
+- **Incremental `daw_tests` rebuild** after touching one `.cpp`: **~6 s** warm (budget < 30 s).
+- `ctest --preset rtsan` and `--preset tsan` both 10/10 locally; `asan` runs clean.
+
+**No engine patches needed** (`patches/` stays empty). Remaining manual item: **[You]**
+launch EZStudio and confirm the 440 Hz sine is audible (the only Phase 0 box that needs a
+human). Phase 1 (timeline MVP) is next per `dev/TODO.md`.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)
