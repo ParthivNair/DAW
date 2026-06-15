@@ -1,0 +1,78 @@
+# EZStudio C++ style — JUCE-flavoured, matched to the hand-written code in
+# src/ and tests/. Requires clang-format >= 19 (uses BreakTemplateDeclarations:
+# Leave). Run the Homebrew LLVM one:
+#   /opt/homebrew/opt/llvm/bin/clang-format   (this repo: v22)
+# NEVER run over libs/ (the pinned engine/JUCE submodules). The PostToolUse
+# hook applies this to every C++ file we edit.
+#
+# Key idioms this reproduces (don't "fix" them, they are deliberate):
+#   * space before non-empty parens, none before empty ()  — foo (x), bar()
+#   * Allman braces; ColumnLimit 0 (author hand-wraps long lines)
+#   * preprocessor directives indented BeforeHash inside #if blocks
+#   * consecutive '=' and decls aligned into columns
+#   * `Type { args }` braced init keeps its space; `! x` keeps its space
+---
+Language: Cpp
+Standard: c++20
+DisableFormat: false
+
+AccessModifierOffset: -4
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Left
+AlignOperands: true
+AlignTrailingComments: true
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+BreakTemplateDeclarations: Leave
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBraces: Allman
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+ColumnLimit: 0
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
+Cpp11BracedListStyle: false
+IndentCaseLabels: true
+IndentPPDirectives: BeforeHash
+PPIndentWidth: 1
+IndentWidth: 4
+IndentWrappedFunctionNames: false
+KeepEmptyLinesAtTheStartOfBlocks: true
+MaxEmptyLinesToKeep: 2
+NamespaceIndentation: Inner
+PackConstructorInitializers: NextLine
+PointerAlignment: Left
+ReferenceAlignment: Left
+ReflowComments: false
+SortIncludes: false
+SpaceAfterCStyleCast: true
+SpaceAfterLogicalNot: true
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: true
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterFunctionDefinitionName: false
+  AfterFunctionDeclarationName: false
+  BeforeNonEmptyParentheses: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+TabWidth: 4
+UseTab: Never

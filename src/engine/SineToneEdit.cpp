@@ -27,7 +27,7 @@ std::unique_ptr<te::Edit> buildSineToneEdit (te::Engine& engine, const SineToneS
 
     // Create + insert the Tone Generator at the head of the track's plugin list.
     auto plugin = edit->getPluginCache().createNewPlugin (te::ToneGeneratorPlugin::xmlTypeName, {});
-    auto* tone = dynamic_cast<te::ToneGeneratorPlugin*> (plugin.get());
+    auto* tone  = dynamic_cast<te::ToneGeneratorPlugin*> (plugin.get());
     jassert (tone != nullptr);
 
     // Write the CachedValues (persisted in the plugin state) ...

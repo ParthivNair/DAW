@@ -20,8 +20,8 @@
 #pragma once
 
 // Default policy: on in debug (NDEBUG unset) unless the build overrides it.
-#if !defined(DAW_RT_CHECKS)
- #if !defined(NDEBUG)
+#if ! defined(DAW_RT_CHECKS)
+ #if ! defined(NDEBUG)
   #define DAW_RT_CHECKS 1
  #else
   #define DAW_RT_CHECKS 0
@@ -60,7 +60,7 @@ public:
     ScopedRealtimeContext() noexcept;
     ~ScopedRealtimeContext() noexcept;
 
-    ScopedRealtimeContext (const ScopedRealtimeContext&) = delete;
+    ScopedRealtimeContext (const ScopedRealtimeContext&)            = delete;
     ScopedRealtimeContext& operator= (const ScopedRealtimeContext&) = delete;
 };
 
@@ -74,8 +74,8 @@ inline RealtimeViolationHandler setRealtimeViolationHandler (RealtimeViolationHa
 class ScopedRealtimeContext
 {
 public:
-    ScopedRealtimeContext() noexcept = default;
-    ScopedRealtimeContext (const ScopedRealtimeContext&) = delete;
+    ScopedRealtimeContext() noexcept                                = default;
+    ScopedRealtimeContext (const ScopedRealtimeContext&)            = delete;
     ScopedRealtimeContext& operator= (const ScopedRealtimeContext&) = delete;
 };
 

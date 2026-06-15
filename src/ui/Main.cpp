@@ -82,7 +82,7 @@ private:
         }
     }
 
-    SineDemoSession session;   // owns the engine + edit; opens the default device.
+    SineDemoSession session; // owns the engine + edit; opens the default device.
     juce::TextButton playStopButton;
     juce::Label deviceLabel;
 
@@ -119,9 +119,9 @@ private:
 class EZStudioApplication final : public juce::JUCEApplication
 {
 public:
-    const juce::String getApplicationName() override    { return "EZStudio"; }
+    const juce::String getApplicationName() override { return "EZStudio"; }
     const juce::String getApplicationVersion() override { return "0.0.1"; }
-    bool moreThanOneInstanceAllowed() override          { return false; }
+    bool moreThanOneInstanceAllowed() override { return false; }
 
     void initialise (const juce::String&) override
     {

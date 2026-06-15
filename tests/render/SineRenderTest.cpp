@@ -29,11 +29,11 @@ TEST_CASE ("440 Hz sine renders to a WAV with the expected RMS and peak frequenc
 {
     constexpr double sampleRate  = 48000.0;
     constexpr double frequencyHz = 440.0;
-    constexpr float  levelLinear = 0.5f;
+    constexpr float levelLinear  = 0.5f;
     constexpr double lengthSecs  = 1.5;
 
     // Expected steady-state RMS of a sine of amplitude 0.5: 0.5 / sqrt(2).
-    constexpr float expectedRmsDbfs = -9.03f;   // 20*log10(0.5/sqrt(2))
+    constexpr float expectedRmsDbfs = -9.03f; // 20*log10(0.5/sqrt(2))
     constexpr float rmsToleranceDb  = 0.5f;
 
     // Headless engine: no audio device is ever opened in the render path.
@@ -47,7 +47,7 @@ TEST_CASE ("440 Hz sine renders to a WAV with the expected RMS and peak frequenc
     REQUIRE (wav->getFile().getSize() > 0);
 
     double readSampleRate = 0.0;
-    auto bufferOpt = daw::render_test::readWavToBuffer (wav->getFile(), readSampleRate);
+    auto bufferOpt        = daw::render_test::readWavToBuffer (wav->getFile(), readSampleRate);
     REQUIRE (bufferOpt.has_value());
     auto& buffer = *bufferOpt;
 
@@ -56,9 +56,9 @@ TEST_CASE ("440 Hz sine renders to a WAV with the expected RMS and peak frequenc
 
     // (c) finite + non-silent.
     juce::dsp::AudioBlock<float> block (buffer);
-    REQUIRE_THAT (block, melatonin::isValidAudio());   // no NaN/Inf
+    REQUIRE_THAT (block, melatonin::isValidAudio()); // no NaN/Inf
     REQUIRE_FALSE (daw::render_test::hasNonFinite (buffer));
-    REQUIRE_THAT (block, melatonin::isFilled());        // not silent
+    REQUIRE_THAT (block, melatonin::isFilled()); // not silent
 
     // Skip ~5 ms at each edge so transport ramp-in/out doesn't bias the level.
     const int edgeSkip = (int) (0.005 * readSampleRate);
@@ -77,11 +77,11 @@ TEST_CASE ("440 Hz sine renders to a WAV with the expected RMS and peak frequenc
         WARN ("[render] sine sparkline (first ~2 cycles): "
               << melatonin::sparkline (head).toStdString());
         WARN ("[render] measured RMS = " << measuredRmsDbfs << " dBFS"
-              << " (expected " << expectedRmsDbfs << " +/- " << rmsToleranceDb << ")");
+                                         << " (expected " << expectedRmsDbfs << " +/- " << rmsToleranceDb << ")");
         WARN ("[render] dominant bin " << peak.binIndex
-              << " -> " << peak.frequencyHz << " Hz"
-              << " (expected " << frequencyHz
-              << ", bin resolution +/- " << peak.binResolutionHz << " Hz)");
+                                       << " -> " << peak.frequencyHz << " Hz"
+                                       << " (expected " << frequencyHz
+                                       << ", bin resolution +/- " << peak.binResolutionHz << " Hz)");
     }
 
     CHECK_THAT (measuredRmsDbfs, WithinAbs (expectedRmsDbfs, rmsToleranceDb));

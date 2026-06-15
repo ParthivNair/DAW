@@ -26,7 +26,7 @@
  // Marks a function we KNOW is unsafe for the audio thread (allocates, locks,
  // does IO). The effect analysis then catches any RT_NONBLOCKING caller of it.
  // Place AFTER the parameter list / noexcept, like RT_NONBLOCKING.
- #define RT_BLOCKING    [[clang::blocking]]
+ #define RT_BLOCKING [[clang::blocking]]
 #else
  #define RT_NONBLOCKING
  #define RT_BLOCKING

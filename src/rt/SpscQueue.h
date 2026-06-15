@@ -93,7 +93,7 @@ public:
         (non-RT) thread — never on the RT path. */
     explicit SpscQueue (std::size_t capacity) : queue (capacity) {}
 
-    SpscQueue (const SpscQueue&) = delete;
+    SpscQueue (const SpscQueue&)            = delete;
     SpscQueue& operator= (const SpscQueue&) = delete;
 
     /** The writer-side view. Use from a single producer thread. */

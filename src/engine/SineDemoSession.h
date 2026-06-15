@@ -5,7 +5,14 @@
 #include <juce_core/juce_core.h>
 #include <memory>
 
-namespace tracktion { inline namespace engine { class Edit; class Engine; } }
+namespace tracktion
+{
+inline namespace engine
+{
+    class Edit;
+    class Engine;
+} // namespace engine
+} // namespace tracktion
 
 namespace daw
 {
@@ -42,7 +49,7 @@ public:
 private:
     SineToneSpec spec;
     std::unique_ptr<tracktion::engine::Engine> engine;
-    std::unique_ptr<tracktion::engine::Edit>   edit;
+    std::unique_ptr<tracktion::engine::Edit> edit;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SineDemoSession)
 };

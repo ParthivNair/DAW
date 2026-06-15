@@ -29,8 +29,7 @@ TEST_CASE ("melatonin test helpers + sparklines work on a JUCE AudioBlock", "[sa
 {
     juce::AudioBuffer<float> buffer (1, 64);
     for (int i = 0; i < buffer.getNumSamples(); ++i)
-        buffer.setSample (0, i, std::sin (juce::MathConstants<float>::twoPi
-                                          * static_cast<float> (i) / 32.0f));
+        buffer.setSample (0, i, std::sin (juce::MathConstants<float>::twoPi * static_cast<float> (i) / 32.0f));
 
     juce::dsp::AudioBlock<float> block (buffer);
 

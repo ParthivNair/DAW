@@ -14,8 +14,8 @@
 // to catch. The volatile sink stops the optimiser from eliding the allocation.
 static void pretendAudioCallback() RT_NONBLOCKING
 {
-    std::vector<int> buffer;     // heap allocation in a nonblocking context
-    buffer.resize (1024, 7);     // ... and a growth, for good measure
+    std::vector<int> buffer; // heap allocation in a nonblocking context
+    buffer.resize (1024, 7); // ... and a growth, for good measure
     volatile int sink = buffer[512];
     (void) sink;
 }

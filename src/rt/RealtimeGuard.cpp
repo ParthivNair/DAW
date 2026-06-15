@@ -8,11 +8,11 @@
 
 #if DAW_RT_CHECKS
 
-#include <atomic>
-#include <cstdio>
-#include <cstdlib>
-#include <new>
-#include <unistd.h>
+ #include <atomic>
+ #include <cstdio>
+ #include <cstdlib>
+ #include <new>
+ #include <unistd.h>
 
 namespace daw::rt
 {
@@ -33,9 +33,7 @@ namespace
                                      "on a thread inside a real-time context. Aborting.\n",
                                      bytes);
         if (n > 0)
-            ::write (STDERR_FILENO, msg, static_cast<size_t> (n) < sizeof (msg)
-                                             ? static_cast<size_t> (n)
-                                             : sizeof (msg));
+            ::write (STDERR_FILENO, msg, static_cast<size_t> (n) < sizeof (msg) ? static_cast<size_t> (n) : sizeof (msg));
         else
             std::fputs ("[rt::RealtimeGuard] FATAL: RT allocation. Aborting.\n", stderr);
 
@@ -83,50 +81,50 @@ namespace
 // ----------------------------------------------------------------------------
 namespace
 {
-    void* rtGuardedAlloc (std::size_t size) // may throw std::bad_alloc
-    {
-        daw::rt::checkRealtimeAllocation (size);
-        if (size == 0)
-            size = 1; // never return nullptr for a 0-byte request
-        void* p = std::malloc (size);
-        if (p == nullptr)
-            throw std::bad_alloc();
-        return p;
-    }
+void* rtGuardedAlloc (std::size_t size) // may throw std::bad_alloc
+{
+    daw::rt::checkRealtimeAllocation (size);
+    if (size == 0)
+        size = 1; // never return nullptr for a 0-byte request
+    void* p = std::malloc (size);
+    if (p == nullptr)
+        throw std::bad_alloc();
+    return p;
+}
 
-    void* rtGuardedAllocNoThrow (std::size_t size) noexcept
-    {
-        daw::rt::checkRealtimeAllocation (size);
-        if (size == 0)
-            size = 1;
-        return std::malloc (size);
-    }
+void* rtGuardedAllocNoThrow (std::size_t size) noexcept
+{
+    daw::rt::checkRealtimeAllocation (size);
+    if (size == 0)
+        size = 1;
+    return std::malloc (size);
+}
 
-    void* rtGuardedAllocAligned (std::size_t size, std::align_val_t al) // may throw
-    {
-        daw::rt::checkRealtimeAllocation (size);
-        const auto alignment = static_cast<std::size_t> (al);
-        if (size == 0)
-            size = alignment; // keep size a positive multiple of alignment
-        // C++17: requested size must be a multiple of alignment for aligned_alloc.
-        if (const auto rem = size % alignment; rem != 0)
-            size += alignment - rem;
-        void* p = std::aligned_alloc (alignment, size);
-        if (p == nullptr)
-            throw std::bad_alloc();
-        return p;
-    }
+void* rtGuardedAllocAligned (std::size_t size, std::align_val_t al) // may throw
+{
+    daw::rt::checkRealtimeAllocation (size);
+    const auto alignment = static_cast<std::size_t> (al);
+    if (size == 0)
+        size = alignment; // keep size a positive multiple of alignment
+    // C++17: requested size must be a multiple of alignment for aligned_alloc.
+    if (const auto rem = size % alignment; rem != 0)
+        size += alignment - rem;
+    void* p = std::aligned_alloc (alignment, size);
+    if (p == nullptr)
+        throw std::bad_alloc();
+    return p;
+}
 
-    void* rtGuardedAllocAlignedNoThrow (std::size_t size, std::align_val_t al) noexcept
-    {
-        daw::rt::checkRealtimeAllocation (size);
-        const auto alignment = static_cast<std::size_t> (al);
-        if (size == 0)
-            size = alignment;
-        if (const auto rem = size % alignment; rem != 0)
-            size += alignment - rem;
-        return std::aligned_alloc (alignment, size);
-    }
+void* rtGuardedAllocAlignedNoThrow (std::size_t size, std::align_val_t al) noexcept
+{
+    daw::rt::checkRealtimeAllocation (size);
+    const auto alignment = static_cast<std::size_t> (al);
+    if (size == 0)
+        size = alignment;
+    if (const auto rem = size % alignment; rem != 0)
+        size += alignment - rem;
+    return std::aligned_alloc (alignment, size);
+}
 } // namespace
 
 void* operator new (std::size_t size) { return rtGuardedAlloc (size); }

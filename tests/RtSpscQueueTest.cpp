@@ -40,8 +40,8 @@ TEST_CASE ("SpscQueue: try_push returns false when full instead of growing", "[r
     while (tx.try_push (pushed))
         ++pushed;
 
-    REQUIRE (pushed >= 4);                 // held at least the requested capacity
-    REQUIRE_FALSE (tx.try_push (9999));    // still refuses (did not grow)
+    REQUIRE (pushed >= 4);              // held at least the requested capacity
+    REQUIRE_FALSE (tx.try_push (9999)); // still refuses (did not grow)
 
     // Everything that went in comes back out in order.
     for (int i = 0; i < pushed; ++i)
@@ -66,15 +66,14 @@ TEST_CASE ("SpscQueue: values cross threads in order", "[rt][spsc]")
     received.reserve (count);
 
     std::thread consumer ([&]
-    {
+                          {
         int got = 0;
         while (received.size() < static_cast<std::size_t> (count))
         {
             if (rx.try_pop (got))
                 received.push_back (got);
             // else: spin — producer hasn't caught up; never grows the queue.
-        }
-    });
+        } });
 
     // Producer: keep retrying try_push on a full queue (back-pressure), never
     // falling back to an allocating enqueue.

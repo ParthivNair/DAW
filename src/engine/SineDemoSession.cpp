@@ -69,9 +69,7 @@ juce::String SineDemoSession::outputDeviceDescription() const
     auto& dm = engine->getDeviceManager();
 
     if (auto* out = dm.getDefaultWaveOutDevice())
-        return out->getName()
-             + " @ " + juce::String (dm.getSampleRate(), 0) + " Hz"
-             + ", block " + juce::String (dm.getBlockSize());
+        return out->getName() + " @ " + juce::String (dm.getSampleRate(), 0) + " Hz" + ", block " + juce::String (dm.getBlockSize());
 
     return "no default output device opened";
 }

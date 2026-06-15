@@ -16,31 +16,31 @@
 
 namespace
 {
-    std::atomic<int> g_violationCount { 0 };
-    std::atomic<std::size_t> g_lastBytes { 0 };
+std::atomic<int> g_violationCount { 0 };
+std::atomic<std::size_t> g_lastBytes { 0 };
 
-    void recordingHandler (std::size_t bytes) noexcept
-    {
-        g_violationCount.fetch_add (1, std::memory_order_relaxed);
-        g_lastBytes.store (bytes, std::memory_order_relaxed);
-        // Deliberately return (do NOT abort) so the test runner survives.
-    }
-
-    // RAII: swap in the recording handler for the test, restore the previous
-    // (production) handler on exit.
-    struct ScopedTestHandler
-    {
-        ScopedTestHandler() noexcept
-        {
-            g_violationCount.store (0, std::memory_order_relaxed);
-            g_lastBytes.store (0, std::memory_order_relaxed);
-            previous = daw::rt::setRealtimeViolationHandler (&recordingHandler);
-        }
-        ~ScopedTestHandler() noexcept { daw::rt::setRealtimeViolationHandler (previous); }
-
-        daw::rt::RealtimeViolationHandler previous { nullptr };
-    };
+void recordingHandler (std::size_t bytes) noexcept
+{
+    g_violationCount.fetch_add (1, std::memory_order_relaxed);
+    g_lastBytes.store (bytes, std::memory_order_relaxed);
+    // Deliberately return (do NOT abort) so the test runner survives.
 }
+
+// RAII: swap in the recording handler for the test, restore the previous
+// (production) handler on exit.
+struct ScopedTestHandler
+{
+    ScopedTestHandler() noexcept
+    {
+        g_violationCount.store (0, std::memory_order_relaxed);
+        g_lastBytes.store (0, std::memory_order_relaxed);
+        previous = daw::rt::setRealtimeViolationHandler (&recordingHandler);
+    }
+    ~ScopedTestHandler() noexcept { daw::rt::setRealtimeViolationHandler (previous); }
+
+    daw::rt::RealtimeViolationHandler previous { nullptr };
+};
+} // namespace
 
 TEST_CASE ("RealtimeGuard: allocation inside a scoped RT context is detected", "[rt][guard]")
 {

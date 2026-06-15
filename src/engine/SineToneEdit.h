@@ -3,7 +3,14 @@
 #include <juce_core/juce_core.h>
 #include <memory>
 
-namespace tracktion { inline namespace engine { class Edit; class Engine; } }
+namespace tracktion
+{
+inline namespace engine
+{
+    class Edit;
+    class Engine;
+} // namespace engine
+} // namespace tracktion
 
 namespace daw
 {
@@ -16,9 +23,9 @@ namespace daw
     only gain in the chain. */
 struct SineToneSpec
 {
-    double frequencyHz   = 440.0;   ///< Tone Generator frequency.
-    float  levelLinear   = 0.5f;    ///< Tone Generator level (linear amplitude of the sine).
-    double durationSecs  = 1.5;     ///< Length of the tone region.
+    double frequencyHz  = 440.0; ///< Tone Generator frequency.
+    float levelLinear   = 0.5f;  ///< Tone Generator level (linear amplitude of the sine).
+    double durationSecs = 1.5;   ///< Length of the tone region.
 };
 
 /** Builds a fresh Edit (single audio track) carrying a ToneGeneratorPlugin set to

@@ -32,24 +32,25 @@ renderEditToWav (te::Edit& edit, double lengthSecs, double sampleRate, int block
     auto temp = std::make_shared<juce::TemporaryFile> (".wav");
 
     te::Renderer::Parameters params (edit);
-    params.destFile          = temp->getFile();
-    params.audioFormat       = edit.engine.getAudioFileFormatManager().getWavFormat();
+    params.destFile           = temp->getFile();
+    params.audioFormat        = edit.engine.getAudioFileFormatManager().getWavFormat();
     params.sampleRateForAudio = sampleRate;
-    params.blockSizeForAudio = blockSize;
-    params.bitDepth          = 24;
-    params.time              = { tracktion::TimePosition(),
-                                 tracktion::TimePosition::fromSeconds (lengthSecs) };
-    params.canRenderInMono   = true;
-    params.usePlugins        = true;
+    params.blockSizeForAudio  = blockSize;
+    params.bitDepth           = 24;
+    params.time               = { tracktion::TimePosition(),
+                                  tracktion::TimePosition::fromSeconds (lengthSecs) };
+    params.canRenderInMono    = true;
+    params.usePlugins         = true;
     // Render every track in the edit (the lone tone track).
-    params.tracksToDo        = te::toBitSet (te::getAllTracks (edit));
+    params.tracksToDo = te::toBitSet (te::getAllTracks (edit));
     // A synth tone always produces audio, but be explicit so a silent edit fails
     // the render rather than silently writing zeros.
     params.checkNodesForAudio = true;
 
     te::Renderer::RenderTask task ("render_test", params, nullptr, nullptr);
     while (task.runJob() == juce::ThreadPoolJob::jobNeedsRunningAgain)
-    {}
+    {
+    }
 
     jassert (task.errorMessage.isEmpty());
     jassert (temp->getFile().existsAsFile());
@@ -108,9 +109,9 @@ inline bool hasNonFinite (const juce::AudioBuffer<float>& buffer)
 /** Result of a single-bin-resolution FFT peak search. */
 struct PeakBin
 {
-    int    binIndex = 0;
-    double frequencyHz = 0.0;
-    double binResolutionHz = 0.0;   ///< sampleRate / fftSize — the +/- tolerance.
+    int binIndex           = 0;
+    double frequencyHz     = 0.0;
+    double binResolutionHz = 0.0; ///< sampleRate / fftSize — the +/- tolerance.
 };
 
 /** Finds the dominant frequency of one channel via a windowed FFT.
@@ -129,9 +130,9 @@ inline PeakBin dominantFrequency (const juce::AudioBuffer<float>& buffer, int ch
     std::vector<float> data ((size_t) fftSize * 2, 0.0f);
 
     // Take the window from the centre of the signal to avoid edge ramps.
-    const int avail = buffer.getNumSamples();
-    const int start = juce::jmax (0, (avail - fftSize) / 2);
-    const int n     = juce::jmin (fftSize, avail - start);
+    const int avail  = buffer.getNumSamples();
+    const int start  = juce::jmax (0, (avail - fftSize) / 2);
+    const int n      = juce::jmin (fftSize, avail - start);
     const float* src = buffer.getReadPointer (channel);
     for (int i = 0; i < n; ++i)
         data[(size_t) i] = src[start + i];
@@ -139,9 +140,9 @@ inline PeakBin dominantFrequency (const juce::AudioBuffer<float>& buffer, int ch
     window.multiplyWithWindowingTable (data.data(), (size_t) fftSize);
     fft.performFrequencyOnlyForwardTransform (data.data());
 
-    int   peakBin = 1;
+    int peakBin   = 1;
     float peakMag = 0.0f;
-    for (int bin = 1; bin < fftSize / 2; ++bin)   // skip DC at bin 0
+    for (int bin = 1; bin < fftSize / 2; ++bin) // skip DC at bin 0
     {
         if (data[(size_t) bin] > peakMag)
         {
