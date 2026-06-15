@@ -243,6 +243,27 @@ commit each, all gated independently before commit):
 launch EZStudio and confirm the 440 Hz sine is audible (the only Phase 0 box that needs a
 human). Phase 1 (timeline MVP) is next per `dev/TODO.md`.
 
+## 2026-06-15 — Live-playback gotchas (post-acceptance fix; sine confirmed audible)
+
+The first-sound app was silent at the acceptance listen check; two engine gotchas the
+offline render test could not catch (it renders via `RenderTask`, never the live transport):
+
+1. **`Edit::EditRole::forRendering` disables device output.** It sets `playDisabled`
+   (`shouldPlay()` → false), so no `EditPlaybackContext` is created — the render path works
+   but live playback is silent. `buildSineToneEdit` now takes a `daw::EditPurpose`
+   (`livePlayback` → `forEditing`, `offlineRender` → `forRendering`); the GUI session uses
+   live playback, the render test opts into offline. **Use `forEditing` for anything that
+   plays through a device.**
+2. **`ToneGeneratorPlugin` emits whenever the graph processes it**, independent of the
+   playhead, and the engine keeps the playback graph live when the transport is merely
+   stopped (monitoring) — so `transport.stop(false, false)` left the tone sounding. The
+   demo's stop now passes `clearDevices=true` to tear the graph down; `play()` re-allocates
+   via `ensureContextAllocated()`. (Tone generator = continuous source; not representative of
+   clip playback, which follows the playhead normally.)
+
+Fix verified: 10/10 ctest still green, render test unchanged, Play/Stop audibly correct.
+This closes the last Phase 0 box — **Phase 0 is fully complete.**
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)

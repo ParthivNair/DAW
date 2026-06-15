@@ -94,7 +94,7 @@ Goal: a clean repo where `cmake --preset dev && cmake --build --preset dev && ct
 
 - [x] [CC] Headless `te::Engine` + `Renderer::renderToFile`: programmatic Edit with a 440 Hz sine → temp WAV → assert RMS level and dominant FFT bin within tolerance. This is the prototype for all future render tests.
 - [x] [CC] `EZStudio` plays a sine through the default CoreAudio output device
-- [ ] [You] Listen: confirm sound comes out of your interface
+- [x] [You] Listen: confirm sound comes out of your interface — confirmed audible 2026-06-15 (needed the live-playback fix; see decisions.md)
 
 ### CI [CC]
 
@@ -112,7 +112,7 @@ Goal: a clean repo where `cmake --preset dev && cmake --build --preset dev && ct
 ### Phase 0 acceptance
 
 - [x] Fresh clone + documented commands → green build + tests, locally and in CI
-- [x] Sine render test passes headlessly; ~~sine audible through speakers~~ (audibility = the [You] listen item above)
+- [x] Sine render test passes headlessly; sine audible through speakers (confirmed 2026-06-15)
 - [x] Incremental `daw_tests` rebuild < 30 s
 
 ---
