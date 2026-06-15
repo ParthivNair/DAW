@@ -77,43 +77,43 @@ Goal: a clean repo where `cmake --preset dev && cmake --build --preset dev && ct
 
 ### Dependencies & build [CC]
 
-- [ ] Add `libs/tracktion_engine` as a **pinned git submodule** (recursive — brings JUCE). Never edit submodule contents; local patches go in `patches/` with an apply script.
-- [ ] Wire **Rubber Band** time-stretching: vendor `breakfastquay/rubberband` (own submodule under `libs/`), copy/symlink into the engine's expected `3rd_party/rubberband` path at configure time, set `TRACKTION_ENABLE_TIMESTRETCH_RUBBERBAND=1` + `TRACKTION_BUILD_RUBBERBAND=1` (single-file build). Keep SoundTouch enabled as the A/B fallback.
-- [ ] Root `CMakeLists.txt` + **`CMakePresets.json`** with presets: `dev` (Ninja, Debug, ccache, `CMAKE_EXPORT_COMPILE_COMMANDS=ON`, arm64), `release` (universal2), `rtsan` (Homebrew LLVM clang, `-fsanitize=realtime`), `asan` (`-fsanitize=address,undefined`) — per the skeleton in [Research/05](../Research/05-claude-code-dev-workflow.md) §2
-- [ ] Three targets: **`daw_core`** static lib (engine glue, zero GUI includes), **`daw_tests`** console test runner (links `daw_core` only — DSP iteration never relinks the GUI app), **`DAWApp`** GUI shell
-- [ ] `target_precompile_headers` (JUCE + Tracktion umbrella headers) on app + core; **no unity builds**
-- [ ] Test deps: **Catch2** + **melatonin_test_helpers** (AudioBlock matchers, sparkline output Claude can read)
-- [ ] Build-speed check: measure and record incremental rebuild of `daw_tests` after touching one `.cpp` — **target < 30 s** (this is the AI iteration-speed budget)
+- [x] Add `libs/tracktion_engine` as a **pinned git submodule** (recursive — brings JUCE). Never edit submodule contents; local patches go in `patches/` with an apply script.
+- [x] Wire **Rubber Band** time-stretching: vendor `breakfastquay/rubberband` (own submodule under `libs/`), copy/symlink into the engine's expected `3rd_party/rubberband` path at configure time, set `TRACKTION_ENABLE_TIMESTRETCH_RUBBERBAND=1` + `TRACKTION_BUILD_RUBBERBAND=1` (single-file build). Keep SoundTouch enabled as the A/B fallback.
+- [x] Root `CMakeLists.txt` + **`CMakePresets.json`** with presets: `dev` (Ninja, Debug, ccache, `CMAKE_EXPORT_COMPILE_COMMANDS=ON`, arm64), `release` (universal2), `rtsan` (Homebrew LLVM clang, `-fsanitize=realtime`), `asan` (`-fsanitize=address,undefined`) — per the skeleton in [Research/05](../Research/05-claude-code-dev-workflow.md) §2
+- [x] Three targets: **`daw_core`** static lib (engine glue, zero GUI includes), **`daw_tests`** console test runner (links `daw_core` only — DSP iteration never relinks the GUI app), **`EZStudio`** GUI shell
+- [x] `target_precompile_headers` (JUCE + Tracktion umbrella headers) on app + core; **no unity builds**
+- [x] Test deps: **Catch2** + **melatonin_test_helpers** (AudioBlock matchers, sparkline output Claude can read)
+- [x] Build-speed check: measure and record incremental rebuild of `daw_tests` after touching one `.cpp` — **target < 30 s** (measured ~6 s warm; see Phase 0 closeout entry in `dev/decisions.md`)
 
 ### Real-time safety foundation [CC]
 
-- [ ] `src/rt/`: the **single facade** for all cross-thread traffic — moodycamel `ReaderWriterQueue` wrapper (`try_enqueue` only on the RT side), `RT_NONBLOCKING` macro → `[[clang::nonblocking]]`, debug-build allocation guard (`RT_CHECK`)
-- [ ] Write `docs/realtime-rules.md` enforcement into CLAUDE.md + a grep tripwire in CI (`rg "std::mutex|malloc|\bnew\b" src/engine/dsp/`)
+- [x] `src/rt/`: the **single facade** for all cross-thread traffic — moodycamel `ReaderWriterQueue` wrapper (`try_enqueue` only on the RT side), `RT_NONBLOCKING` macro → `[[clang::nonblocking]]`, debug-build allocation guard (`RT_CHECK`)
+- [x] Write `docs/realtime-rules.md` enforcement into CLAUDE.md + a grep tripwire in CI (`rg "std::mutex|malloc|\bnew\b" src/engine/dsp/`)
 
 ### First sound + first render test [CC, then You]
 
-- [ ] [CC] Headless `te::Engine` + `Renderer::renderToFile`: programmatic Edit with a 440 Hz sine → temp WAV → assert RMS level and dominant FFT bin within tolerance. This is the prototype for all future render tests.
-- [ ] [CC] `DAWApp` plays a sine through the default CoreAudio output device
-- [ ] [You] Listen: confirm sound comes out of your interface
+- [x] [CC] Headless `te::Engine` + `Renderer::renderToFile`: programmatic Edit with a 440 Hz sine → temp WAV → assert RMS level and dominant FFT bin within tolerance. This is the prototype for all future render tests.
+- [x] [CC] `EZStudio` plays a sine through the default CoreAudio output device
+- [x] [You] Listen: confirm sound comes out of your interface — confirmed audible 2026-06-15 (needed the live-playback fix; see decisions.md)
 
 ### CI [CC]
 
-- [ ] `.github/workflows/build-and-test.yml`: macOS (Apple-silicon runner) primary lane + cheap Linux cross-check lane; ccache via `hendrikmuhs/ccache-action`; recursive submodule checkout; `ctest` headless; failed-render WAVs uploaded as artifacts
-- [ ] Separate **rtsan** job (macOS, Homebrew LLVM): render tests under `-fsanitize=realtime`
-- [ ] Periodic (weekly) **TSan + ASan** lane over multithreaded engine tests
+- [x] `.github/workflows/build-and-test.yml`: macOS (Apple-silicon runner) primary lane + cheap Linux cross-check lane; ccache via `hendrikmuhs/ccache-action`; recursive submodule checkout; `ctest` headless; failed-render WAVs uploaded as artifacts
+- [x] Separate **rtsan** job (macOS, Homebrew LLVM): render tests under `-fsanitize=realtime`
+- [x] Periodic (weekly) **TSan + ASan** lane over multithreaded engine tests
 
 ### Claude Code harness [CC]
 
-- [ ] Finalize root `CLAUDE.md` with the **exact** build/test commands (acceptance test: fresh session told "run the tests" succeeds first try)
-- [ ] Per-directory `CLAUDE.md` for `src/engine/`, `src/ui/`, `tests/`
-- [ ] Hooks: PostToolUse `clang-format -i` on edited C++ files; Stop hook running build + ctest as a turn gate
-- [ ] Skills: `render-test` (how to author a golden render test), `tracktion-api` (Edit/Renderer/TransportControl cheat-sheet), `rt-review` (audio-thread diff checklist)
+- [x] Finalize root `CLAUDE.md` with the **exact** build/test commands (acceptance test: fresh session told "run the tests" succeeds first try)
+- [x] Per-directory `CLAUDE.md` for `src/engine/`, `src/ui/`, `tests/`
+- [x] Hooks: PostToolUse `clang-format -i` on edited C++ files; Stop hook running build + ctest as a turn gate
+- [x] Skills: `render-test` (how to author a golden render test), `tracktion-api` (Edit/Renderer/TransportControl cheat-sheet), `rt-review` (audio-thread diff checklist)
 
 ### Phase 0 acceptance
 
-- [ ] Fresh clone + documented commands → green build + tests, locally and in CI
-- [ ] Sine render test passes headlessly; sine audible through speakers
-- [ ] Incremental `daw_tests` rebuild < 30 s
+- [x] Fresh clone + documented commands → green build + tests, locally and in CI
+- [x] Sine render test passes headlessly; sine audible through speakers (confirmed 2026-06-15)
+- [x] Incremental `daw_tests` rebuild < 30 s
 
 ---
 

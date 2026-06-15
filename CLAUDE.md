@@ -6,9 +6,19 @@ Decisions log: `dev/decisions.md`.
 
 ## Build & test
 
-The build system does not exist yet — it is Phase 0 in `dev/TODO.md`. Once it lands, this section
-must contain the exact canonical commands (CMake presets: `dev`, `release`, `rtsan`, `asan`;
-Ninja + ccache; never the Xcode generator). Update this file in the same PR that adds the build.
+Presets: `dev` (Debug, native arm64), `release` (universal2), `rtsan` (Homebrew LLVM,
+`-fsanitize=realtime`), `asan` (`address,undefined`), `tsan` (`thread`). Ninja + ccache;
+**never the Xcode generator**.
+
+- Configure: `cmake --preset dev`
+- Build: `cmake --build --preset dev`            (targets: `daw_core`, `daw_tests`, `EZStudio`)
+- Test: `ctest --preset dev`
+- Single test: `build/dev/daw_tests "[tag]"`     (e.g. `"[sanity]"`; Catch2 tag filter)
+- RT-hazard grep gate: `tools/rt-tripwire.sh`    (scans `src/engine/dsp/`; CI runs it too)
+- Fresh clone bootstrap: `tools/bootstrap.sh`
+
+`compile_commands.json` lands in `build/dev/` for clangd. Configure symlinks `libs/rubberband`
+into the engine's `modules/3rd_party/`; that link is regenerated per build dir, never committed.
 
 ## Audio-thread rules (HARD RULES — see docs/realtime-rules.md)
 
@@ -35,3 +45,12 @@ Ninja + ccache; never the Xcode generator). Update this file in the same PR that
   context unprompted; prefer headers and the demos.
 - Project license: GPL-3.0-or-later; builds incorporate JUCE under AGPL-3.0. New dependencies
   must be GPLv3-compatible and recorded in `THIRD_PARTY_LICENSES.md`.
+
+## Claude Code harness
+
+- **Skills** (`.claude/skills/`): `render-test`, `tracktion-api`, `rt-review` — load on demand.
+- **Hooks** (`.claude/settings.json`): PostToolUse auto-runs `clang-format -i` on edited C++
+  (`tools/hooks/clang-format-changed.sh`); Stop gate builds `daw_tests` + runs `ctest` before a
+  turn ends (`tools/hooks/stop-gate.sh`).
+- **Style**: `.clang-format` (Homebrew LLVM `clang-format`). Per-directory `CLAUDE.md` files in
+  `src/engine`, `src/ui`, `tests` carry the local rules.

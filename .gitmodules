@@ -1,0 +1,21 @@
+[submodule "libs/tracktion_engine"]
+	path = libs/tracktion_engine
+	url = https://github.com/Tracktion/tracktion_engine
+	# CMake symlinks libs/rubberband into modules/3rd_party/rubberband at configure
+	# time (single-file Rubber Band build); ignore that so it never dirties status.
+	ignore = untracked
+[submodule "libs/rubberband"]
+	path = libs/rubberband
+	url = https://github.com/breakfastquay/rubberband
+[submodule "libs/Catch2"]
+	path = libs/Catch2
+	url = https://github.com/catchorg/Catch2
+[submodule "libs/melatonin_test_helpers"]
+	path = libs/melatonin_test_helpers
+	url = https://github.com/sudara/melatonin_test_helpers
+[submodule "libs/melatonin_audio_sparklines"]
+	path = libs/melatonin_audio_sparklines
+	url = https://github.com/sudara/melatonin_audio_sparklines
+[submodule "libs/readerwriterqueue"]
+	path = libs/readerwriterqueue
+	url = https://github.com/cameron314/readerwriterqueue

@@ -124,9 +124,149 @@ then, investigate before trusting nested-edit renders.
 confirm audio comes out of the speakers (no programmatic audio/screen capture was available
 in this session).
 
+## 2026-06-11 — Phase 0 Chunk 2: build skeleton (CMake + presets + targets)
+
+App identity (locked): name **EZStudio**, bundle id `com.parthivnair.ezstudio`,
+company "Parthiv Nair". Targets: **EZStudio** (GUI app, `juce_add_gui_app`),
+**daw_core** (STATIC engine glue, my code, ZERO GUI includes), **daw_tests** (Catch2
+console runner, links `daw_core` only). Project name `daw`, C++20, macOS arm64.
+
+**CMake structure decision — the engine compiles into its own PCH-free `daw_engine`
+lib, not into `daw_core`.** JUCE modules amalgamate their sources into whatever target
+links the module *interface* targets, and those amalgamation TUs `#error "Incorrect
+use of JUCE cpp file"` if ANY prefix header (a force-included PCH) precedes them — and
+they mix C++/Objective-C++, which one PCH can't satisfy. So an internal `daw_engine`
+STATIC lib links the tracktion/JUCE modules **PRIVATE** (sources compile there once,
+no PCH) and re-exports them to consumers via `$<LINK_ONLY:tracktion::...>` plus the
+interface include dirs + `TRACKTION_*`/JUCE defines. Result: `daw_core`/`EZStudio`/
+`daw_tests` link the engine's symbols + frameworks WITHOUT recompiling module sources,
+which is exactly what lets `daw_core`/`EZStudio` carry a PCH. `target_precompile_headers`
+uses `__cplusplus`-guarded wrapper headers (`src/engine/DawCorePCH.h`, `src/ui/EZStudioPCH.h`)
+so the C-language PCH CMake also emits (project enables C for JUCE's C TUs) is a no-op.
+No unity builds.
+
+**Rubber Band** wired per Spike 2: configure-time symlink (copy fallback) of
+`libs/rubberband` → `libs/tracktion_engine/modules/3rd_party/rubberband`; defines
+`TRACKTION_ENABLE_TIMESTRETCH_RUBBERBAND=1` + `TRACKTION_BUILD_RUBBERBAND=1` (engine's
+`tracktion_engine.cpp` then `#include`s `<rubberband/single/RubberBandSingle.cpp>`).
+SoundTouch stays on as the A/B fallback. `ignore = untracked` on the `libs/tracktion_engine`
+submodule entry in our `.gitmodules` keeps the link out of `git status`.
+
+Every preset pins `CMAKE_OSX_SYSROOT=…/Xcode.app/…/MacOSX.sdk` (SDK skew, Spike 2);
+Ninja only; `dev` uses ccache + `CMAKE_EXPORT_COMPILE_COMMANDS`; `rtsan` uses Homebrew
+LLVM clang 22 (`/opt/homebrew/opt/llvm/bin/clang++`) + `-fsanitize=realtime`; `asan` uses
+`-fsanitize=address,undefined`.
+
+**Measured (M1 Pro, this machine):**
+- Cold configure (warm build dir): ~4 s; clean configure incl. juceaide + RB link: ~11 s.
+- Cold build, empty ccache, `dev` all targets: **50 s** (158/177 ccache misses).
+- Clean configure+build+test, warm ccache: 4 s + 11 s + 1.2 s; `ctest --preset dev` 3/3 green.
+- **Incremental rebuild of `daw_tests` after touching `src/engine/EngineInfo.cpp`: 2.8 s**
+  (well under the 30 s AI-iteration budget — the 300 MB `daw_engine.a` never recompiles).
+- `rtsan`: cold build of `daw_tests` ~46 s (Homebrew clang, no ccache hits); `ctest --preset
+  rtsan` 3/3 green with `-fsanitize=realtime` intact.
+- `asan`: `daw_tests` builds + runs 3/3 green under `-fsanitize=address,undefined`.
+- `git status`: engine submodule NOT dirtied by the RB link.
+
+## 2026-06-11 — Phase 0 Chunk 4: first sound + first render test
+
+First-sound milestone and the prototype render test landed. The deterministic source
+is the engine's **`ToneGeneratorPlugin`** (sine osc, `producesAudioWhenNoAudioInput()`):
+no clip/file/tempo/time-stretch in the path, so the render is bit-stable and the expected
+level is trivial. Shared edit builder `src/engine/SineToneEdit.cpp` is used by both the
+render test and the GUI.
+
+**Gotcha (binds future plugin work):** `ToneGeneratorPlugin` is **NOT** one of the
+engine's default built-in types — `PluginManager::initialise()` omits it — so
+`PluginCache::createNewPlugin("toneGenerator", {})` returns null until you call
+`engine.getPluginManager().createBuiltInType<ToneGeneratorPlugin>()` first
+(idempotent: `registerBuiltInType` skips an already-present type). Also: setting a
+plugin's `CachedValue` (`tone->frequency = …`) does **not** refresh the
+`AutomatableParameter` the DSP reads in `applyToBuffer()`; you must
+`updateFromAttachedValue()` on each parameter (mirrors `restorePluginStateFromValueTree`),
+otherwise the render comes out at the plugin defaults (220 Hz, level 1.0).
+
+**Headless render gotcha:** `Renderer::renderToFile(taskDescription, params)` routes through
+`UIBehaviour::runTaskWithProgressBar`, which never returns under a headless engine with no
+message loop (it hangs). The render helper instead drives a `Renderer::RenderTask` inline
+(`while (task.runJob() == jobNeedsRunningAgain) {}`) — the same thing as Renderer's own
+`useThread=false` path. Tests that construct an `Engine` also need a process-wide
+`juce::ScopedJuceInitialiser_GUI` (a Catch2 listener in `tests/TestMain.cpp`), else JUCE's
+global singletons read as leaked at exit.
+
+**Render-test numbers** (`tests/render/SineRenderTest.cpp`, tag `[render]`, 48 kHz, 1.5 s,
+440 Hz sine at level 0.5): measured RMS **-9.031 dBFS** (expected -9.03 ±0.5; 0.5/√2),
+dominant FFT bin 150 → **439.45 Hz** (expected 440, bin resolution ±2.93 Hz), finite +
+not silent. `ctest --preset dev` and `--preset rtsan` both **10/10 green** (9 old + render);
+the render test is ~1.5 s and clean under `-fsanitize=realtime` (offline render is the
+designed RTSan workload). EZStudio launches, opens the default CoreAudio output
+("Output 1 + 2 @ 44100 Hz"), and auto-plays the looped tone (Play/Stop toggle).
+
+**EditClip recheck — now PASSES (Spike 2 follow-up resolved).** Built the engine's own
+TestRunner from our pinned submodule (Debug, scratch dir `/tmp/te-testrunner-build`) with
+Rubber Band vendored at `modules/3rd_party/rubberband` (CMake logs "Found rubberband,
+enabling"). Headless run: **`[doctest] Status: SUCCESS!` — 54/54 cases, 1027/1027
+assertions, 0 failed**; `tracktion_EditClip.test.cpp` "EditClip" case passes (3.12 s, no
+assertion failures). This confirms the Spike 2 hypothesis: the prior null-test failure
+(nested-edit render RMS diff ≈0.692 vs ≈0 expected) was SoundTouch's processing offset
+breaking sample-aligned cancellation; Rubber Band fixes it. Nested-edit renders can now be
+trusted. (Run was Debug with all benchmarks enabled, hence ~8 min; SHAs unchanged.)
+
+## 2026-06-15 — Phase 0 closeout: skeleton complete, CI green
+
+Phase 0 landed in seven verified chunks on branch `claude/goofy-sammet-7d6fd2` (one
+commit each, all gated independently before commit):
+
+1. Vendored pinned submodules under `libs/` + `tools/bootstrap.sh` (JUCE SSH→HTTPS fix) +
+   `THIRD_PARTY_LICENSES.md`.
+2. CMake skeleton: `dev`/`release`/`rtsan`/`asan` presets (all pin the Xcode SDK sysroot),
+   targets `daw_core`/`daw_tests`/`EZStudio`, internal PCH-free `daw_engine` lib, Rubber
+   Band wiring.
+3. `src/rt/` facade: `RT_NONBLOCKING`, SPSC queue wrapper (producer/consumer views,
+   `try_*` only), `RT_CHECK` allocation guard; `tools/rt-tripwire.sh`.
+4. First sound + prototype render test (`tests/render/`, `[render]`); EditClip null test now
+   passes with Rubber Band (Spike 2 hypothesis confirmed — see Chunk 4 entry above).
+5. CI: `build-and-test.yml` (macOS dev + Linux dev + macOS rtsan) + `sanitizers-weekly.yml`
+   (ASan/UBSan + TSan); added a `tsan` preset.
+6. Claude harness: `.clang-format`, PostToolUse clang-format + Stop build/ctest gate hooks,
+   per-dir `CLAUDE.md`, skills `render-test`/`tracktion-api`/`rt-review`.
+
+**Acceptance (all green):**
+- **Fresh clone** of the branch into a temp dir → `tools/bootstrap.sh` → `cmake --preset dev`
+  → build → `ctest --preset dev`: **10/10 first try**.
+- **CI on GitHub Actions** (chunk-5 push): macOS (dev), Linux (dev), macOS (rtsan) all
+  **success**. Cold macOS lanes ~4–5 min; Linux cross-check green.
+- **Incremental `daw_tests` rebuild** after touching one `.cpp`: **~6 s** warm (budget < 30 s).
+- `ctest --preset rtsan` and `--preset tsan` both 10/10 locally; `asan` runs clean.
+
+**No engine patches needed** (`patches/` stays empty). Remaining manual item: **[You]**
+launch EZStudio and confirm the 440 Hz sine is audible (the only Phase 0 box that needs a
+human). Phase 1 (timeline MVP) is next per `dev/TODO.md`.
+
+## 2026-06-15 — Live-playback gotchas (post-acceptance fix; sine confirmed audible)
+
+The first-sound app was silent at the acceptance listen check; two engine gotchas the
+offline render test could not catch (it renders via `RenderTask`, never the live transport):
+
+1. **`Edit::EditRole::forRendering` disables device output.** It sets `playDisabled`
+   (`shouldPlay()` → false), so no `EditPlaybackContext` is created — the render path works
+   but live playback is silent. `buildSineToneEdit` now takes a `daw::EditPurpose`
+   (`livePlayback` → `forEditing`, `offlineRender` → `forRendering`); the GUI session uses
+   live playback, the render test opts into offline. **Use `forEditing` for anything that
+   plays through a device.**
+2. **`ToneGeneratorPlugin` emits whenever the graph processes it**, independent of the
+   playhead, and the engine keeps the playback graph live when the transport is merely
+   stopped (monitoring) — so `transport.stop(false, false)` left the tone sounding. The
+   demo's stop now passes `clearDevices=true` to tear the graph down; `play()` re-allocates
+   via `ensureContextAllocated()`. (Tone generator = continuous source; not representative of
+   clip playback, which follows the playhead normally.)
+
+Fix verified: 10/10 ctest still green, render test unchanged, Play/Stop audibly correct.
+This closes the last Phase 0 box — **Phase 0 is fully complete.**
+
 ## Pending (fill in when decided)
 
-- App name / bundle identifier: _TBD_
+- ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)
 - ~~Tracktion Engine pinned SHA + JUCE submodule SHA~~: pinned (see 2026-06-11 Spike 2 entry)
 - ~~Semantic-search path GO/NO-GO~~: **GO** (see 2026-06-11 Spike 1 entry)
 - ~~Freesound OAuth2 redirect~~: registered as the paste-the-code page (see Spike 1 entry)

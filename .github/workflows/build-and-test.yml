@@ -1,0 +1,148 @@
+name: build-and-test
+
+on:
+  push:
+  pull_request:
+
+# One in-flight run per ref; a new push cancels the previous run (saves the 10x
+# macOS minutes).
+concurrency:
+  group: build-and-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # macOS lane (PRIMARY target). Apple-silicon runner, ccache, full dev preset:
+  # configure + build + ctest, then the RT grep tripwire.
+  # ---------------------------------------------------------------------------
+  macos:
+    name: macOS (dev)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          # Top-level submodules; the NESTED JUCE submodule is initialized by
+          # tools/bootstrap.sh below (its .gitmodules pins JUCE over SSH, which
+          # recursive checkout cannot resolve without SSH keys).
+          submodules: true
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ccache-macos-14
+
+      - name: Install build tools
+        run: brew install ninja ccache
+
+      - name: Bootstrap submodules (JUCE SSH->HTTPS rewrite + pinned-SHA assert)
+        run: tools/bootstrap.sh
+
+      - name: Configure
+        run: cmake --preset dev
+
+      - name: Build
+        run: cmake --build --preset dev
+
+      - name: Test
+        run: ctest --preset dev
+
+      - name: RT tripwire (grep gate)
+        run: tools/rt-tripwire.sh
+
+      # Render tests write to self-deleting juce::TemporaryFiles, so there are no
+      # persistent failed-render WAVs to collect. On failure, upload the ctest log
+      # directory (it captures the full per-test output incl. render diagnostics)
+      # so the failure can be inspected without re-running the 10x-billed lane.
+      - name: Upload ctest logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-logs-macos
+          path: build/dev/Testing/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Linux lane (CHEAP cross-check, 10x fewer billed minutes). dev preset only:
+  # the CMAKE_OSX_* cache vars in the preset are ignored on non-Apple platforms,
+  # and the rtsan preset hardcodes a Homebrew-clang path that does not exist here.
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux (dev)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ccache-ubuntu-24.04
+
+      - name: Install build + JUCE deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build ccache \
+            libasound2-dev libcurl4-openssl-dev \
+            libx11-dev libxinerama-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libfreetype6-dev libfontconfig1-dev \
+            libwebkit2gtk-4.1-dev libglu1-mesa-dev
+
+      - name: Bootstrap submodules (JUCE SSH->HTTPS rewrite + pinned-SHA assert)
+        run: tools/bootstrap.sh
+
+      - name: Configure
+        run: cmake --preset dev
+
+      - name: Build
+        run: cmake --build --preset dev
+
+      - name: Test
+        run: ctest --preset dev
+
+      - name: Upload ctest logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-logs-linux
+          path: build/dev/Testing/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # RTSan lane (macOS). Homebrew LLVM clang ships the -fsanitize=realtime runtime
+  # that Apple's bundled clang may not; the rtsan preset pins that compiler path.
+  # ---------------------------------------------------------------------------
+  rtsan:
+    name: macOS (rtsan)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ccache-rtsan-macos-14
+
+      - name: Install LLVM + build tools
+        run: brew install llvm ninja ccache
+
+      - name: Bootstrap submodules (JUCE SSH->HTTPS rewrite + pinned-SHA assert)
+        run: tools/bootstrap.sh
+
+      - name: Configure
+        run: cmake --preset rtsan
+
+      - name: Build
+        run: cmake --build --preset rtsan
+
+      - name: Test
+        run: ctest --preset rtsan
