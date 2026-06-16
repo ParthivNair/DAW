@@ -376,6 +376,27 @@ disk, in recents; **reopen in a fresh ProjectSession** → 2 tracks + 1 clip at 
 position; render bufB → **perfect −200 dBFS null** vs bufA. Plus: open of a missing file
 returns false and leaves no edit. Gate: `ctest --preset dev` **14/14 green, 29.5 s**.
 
+## 2026-06-15 — Phase 1 Chunk 5: ArrangementRenderer (export to WAV)
+
+`src/engine/ArrangementRenderer.{h,cpp}` — `exportEditToWav(edit, dest, ExportOptions)`,
+the GUI-free service behind the timeline's Export command. Same technique as
+RenderHelpers (Renderer::RenderTask inline pump + message-loop slice between blocks for
+wave clips) but a production-facing API: `ExportOptions{sampleRate, bitDepth, blockSize,
+useMasterPlugins=true, failIfSilent, startSecs, endSecs<0=whole edit}` →
+`ExportResult{success, errorMessage, lengthSeconds}`.
+
+Kept **separate** from RenderHelpers (which stays a test fixture) so the passing render
+tests are byte-for-byte unaffected. Note the engine `Renderer::Parameters` defaults:
+`useMasterPlugins=false`, `usePlugins=true`, `canRenderInMono=true`,
+`checkNodesForAudio=true` — so the exporter sets `useMasterPlugins` from options (defaults
+**true**: a user's export should include the master fader, unlike the test fixture).
+
+**Render test** `tests/render/ExportRenderTest.cpp` `[render]`: a two-clip arrangement
+exported at 48k and 44.1k → both clips read back as 440 Hz, correct file sample rate,
+length ≈ clip-B end, finite, errorMessage empty; and with the master cut −6 dB,
+`useMasterPlugins=true` yields −15.03 dBFS vs `false` yields −9.03 dBFS. Gate:
+`ctest --preset dev` **15/15 green, 32.5 s**.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)
