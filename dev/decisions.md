@@ -397,6 +397,30 @@ length ≈ clip-B end, finite, errorMessage empty; and with the master cut −6 
 `useMasterPlugins=true` yields −15.03 dBFS vs `false` yields −9.03 dBFS. Gate:
 `ctest --preset dev` **15/15 green, 32.5 s**.
 
+## 2026-06-15 — Phase 1 Chunk 6: TimelineViewModel + TransportModel
+
+GUI-free presentation model so the timeline UI stays dumb and the maths is unit-testable:
+
+- **`TimelineViewModel`** (`src/engine/TimelineViewModel.h`, header-only, **engine-free**):
+  pure pixel<->time mapping over a visible window + width — `timeToX`/`xToTime` (round-trip
+  < 1 px), `zoomBy(factor, anchorX)` (keeps the time under the anchor fixed),
+  `scrollByPixels`, `followPlayhead` (auto-follow when the playhead crosses the right
+  margin). Testable with plain asserts, no engine/GUI.
+- **Musical helpers** (`TimelineViewModel.cpp`, take `te::Edit&`): `snapSecondsToBar`/
+  `snapSecondsToBeat` via `tempoSequence.toBeats`/`toTime` (round to the nearest beat
+  multiple; bar = nearest multiple of the time-sig numerator), `barsBeatsText` (1-based
+  "bar|beat" from `tempo::BarsAndBeats`), `minSecText`.
+- **`TransportModel`** (`src/engine/TransportModel.{h,cpp}`): play/stop/togglePlay/loop/
+  position over `Edit::getTransport()` (`ensureContextAllocated`+`play(false)`;
+  `stop(false,false)` — clips follow the playhead, so no clearDevices teardown needed,
+  unlike the Phase 0 continuous tone) + the bars:beats / min:sec readouts.
+
+**Tests** `tests/render/TimelineMappingTest.cpp`: `[timeline]` pure-math case (mapping
+round-trip, zoom-about-anchor, scroll, follow); `[render]` musical case at a pinned 120 bpm
+4/4 (beat 0.5 s, bar 2 s) — bars:beats/min:sec/snap values exact, and a clip snapped
+1.8 s→2.0 s renders silent up to the bar (−200 dBFS) then tone (−9.03 dBFS), tying the
+snap maths to audio. Gate: `ctest --preset dev` **17/17 green, 37.0 s**.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)
