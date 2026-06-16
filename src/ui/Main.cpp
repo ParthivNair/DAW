@@ -9,6 +9,7 @@
 #include "engine/TimelineViewModel.h"
 #include "engine/TransportModel.h"
 #include "ui/ArrangementView.h"
+#include "ui/ClipComponent.h"
 #include "ui/TransportBarComponent.h"
 
 namespace te = tracktion::engine;
@@ -69,6 +70,7 @@ public:
         {
             m.addItem (newId, "New");
             m.addItem (openId, "Open...");
+            m.addItem (importId, "Import Audio...", arrangement != nullptr);
             m.addSeparator();
             m.addItem (saveId, "Save");
             m.addItem (saveAsId, "Save As...");
@@ -99,6 +101,9 @@ public:
                 break;
             case openId:
                 chooseOpen();
+                break;
+            case importId:
+                chooseImport();
                 break;
             case saveId:
                 doSave();
@@ -141,6 +146,7 @@ private:
     {
         newId = 1,
         openId,
+        importId,
         saveId,
         saveAsId,
         exportId,
@@ -201,6 +207,27 @@ private:
                                   teardownUI();
                                   session->openProject (f);
                                   buildUI();
+                              });
+    }
+
+    void chooseImport()
+    {
+        if (arrangement == nullptr)
+            return;
+
+        chooser = std::make_unique<juce::FileChooser> (
+            "Import audio", juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3;*.ogg;*.m4a;*.caf");
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::canSelectMultipleItems,
+                              [this] (const juce::FileChooser& fc)
+                              {
+                                  if (arrangement == nullptr)
+                                      return;
+                                  // Lay each selected file end-to-end from the visible start, onto
+                                  // the first track — mirrors ArrangementView::filesDropped.
+                                  double at = juce::jmax (0.0, viewModel.viewStartSecs());
+                                  for (const auto& f : fc.getResults())
+                                      if (auto* cc = arrangement->importFileAt (f, 0, at))
+                                          at = cc->clip().getPosition().getEnd().inSeconds();
                               });
     }
 
