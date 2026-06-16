@@ -300,6 +300,35 @@ temp WAV, import it at t=2.0 s on a 4-track arrangement, render the whole edit, 
 (c) finite + body filled, (d) a missing-file import returns nullptr. Gate: `ctest --preset
 dev` **11/11 green, 11.1 s** (import test 3.0 s); the Phase-0 tone render is unchanged at 2.4 s.
 
+## 2026-06-15 — Phase 1 Chunk 2: ClipOps (move/trim/offset/gain/fades/delete)
+
+GUI-free clip-edit operations in `src/engine/ClipOps.{h,cpp}` — the engine half of the
+timeline's clip interactions, render-tested before any drag handle exists. Each op opens
+its own undo transaction (`edit.getUndoManager().beginNewTransaction(name)`) so one
+gesture == one undo step (the round-trip is proven by Chunk 3). Verified engine setters:
+
+- `moveClip` → `Clip::setStart(pos, preserveSync=false, keepLength=true)` (source moves
+  with the clip; same audio plays at the new position — confirmed by render).
+- `setClipLength` → `Clip::setLength(dur, preserveSync=false)`; `setClipOffset` →
+  `Clip::setOffset(dur)`; `deleteClip` → `Clip::removeFromParent()`.
+- `setClipGainDb` → `AudioClipBase::setGainDB`; fades → `setFadeIn/Out` +
+  `setFadeInType/OutType` (`AudioFadeCurve::Type` 1=linear…4=sCurve, mapped from a
+  header-local `daw::FadeCurve` enum so ClipOps.h stays engine-free); `applyClipEdgeFades`.
+
+**Upstream engine bug found (same class as the Spike 2 LoopInfo bug):**
+`AudioClipBase::setFadeIn`/`setFadeOut` (`tracktion_AudioClipBase.cpp:511`) **always
+return `false`** even on success — the no-overrun branch does `fadeIn = in; return false;`
+and the function falls through to `return false`. The fade IS applied; only the bool is
+wrong. So `daw::setClipFadeIn/Out` return **void**; verify via `getFadeIn()` and a render,
+never the engine's bool. (Worth reporting on the Tracktion forum alongside the LoopInfo bug.)
+
+**Render test** `tests/render/ClipOpsRenderTest.cpp` `[render]` (one source tone rendered
+once, re-imported per section): move → tone appears at the new start, region before it
+silent, body still 440 Hz at −9.03 dBFS; trim → tail where the untrimmed clip used to play
+goes silent; gain −6 dB → body −15.03 dBFS; fade-in 0.4 s → clip start (−22.8 dBFS) well
+below steady state (−9.0 dBFS); delete → track clip count → 0. Gate: `ctest --preset dev`
+**12/12 green, 18.0 s** (ClipOps test ~6.8 s).
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)
