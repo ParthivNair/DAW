@@ -264,6 +264,42 @@ offline render test could not catch (it renders via `RenderTask`, never the live
 Fix verified: 10/10 ctest still green, render test unchanged, Play/Stop audibly correct.
 This closes the last Phase 0 box — **Phase 0 is fully complete.**
 
+## 2026-06-15 — Phase 1 Chunk 1: ArrangementEdit + audio-file import
+
+Phase 1 (timeline MVP) starts. Architecture mirrors Phase 0's winning split: the
+GUI-free arrangement *model* lives in `daw_core` (`src/engine/`) and is render-tested
+headlessly; the GUI shell (Phase-1 later chunks) just drives it. New this chunk:
+
+- **`EditPurpose` extracted** from `SineToneEdit.h` into `src/engine/EditPurpose.h` (the
+  `livePlayback`/`offlineRender` enum) so the arrangement model + UI share it without
+  coupling to the sine demo. The Edit-builder `.cpp`s map it to `Edit::EditRole` locally,
+  so the header still pulls in zero tracktion types.
+- **`buildArrangementEdit(engine, numAudioTracks, purpose)`** — multi-track blank Edit via
+  `createSingleTrackEdit` + `ensureNumberOfAudioTracks`, master + per-track volume
+  neutralised to unity (only clip-level edits show up in a render).
+- **`importAudioFileAsClip(track, file, startSecs, deleteExisting)`** — validates
+  `te::AudioFile(engine,file).isValid()` then `track.insertWaveClip(name, file,
+  ClipPosition{{start, len}, {}}, deleteExisting)`. The **member** `insertWaveClip` taking a
+  `juce::File` (not the `ClipOwner` free function, not a `ProjectItemID`) is the demo form.
+  `TimePosition`/`TimeDuration` live in `tracktion::` (core), NOT `tracktion::engine::`.
+
+**Gotcha that binds every future wave-clip render test (hard-won here):** the headless
+`renderEditToWav` tight pump `while (task.runJob()==jobNeedsRunningAgain){}` is fine for a
+tone/synth (no file I/O) but **~20× too slow for a clip that reads audio off disk** — a
+3.5 s wave render took **65 s** because the tight loop starves the engine's
+`AudioFileManager`/cache async file reads of message-thread time. Fix: pump the message
+loop a slice between blocks (`MessageManager::runDispatchLoopUntil(1)`, allowed because
+`JUCE_MODAL_LOOPS_PERMITTED=1`). This mirrors the engine's own
+`renderToAudioBufferDispatchingMessageThread`. After the fix the same render is **3.0 s**.
+`RenderHelpers.h` now does this for all render tests; also added `regionRmsDbfs` +
+`regionView` helpers (silence-before-clip and clip-body assertions).
+
+**Render test** `tests/render/ImportClipRenderTest.cpp` `[render]`: render a 440 Hz tone to a
+temp WAV, import it at t=2.0 s on a 4-track arrangement, render the whole edit, assert
+(a) pre-clip region silent (−200 dBFS), (b) clip body 440 Hz at the source's −9.03 dBFS RMS,
+(c) finite + body filled, (d) a missing-file import returns nullptr. Gate: `ctest --preset
+dev` **11/11 green, 11.1 s** (import test 3.0 s); the Phase-0 tone render is unchanged at 2.4 s.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)

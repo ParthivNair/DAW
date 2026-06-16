@@ -126,6 +126,8 @@ add_library(daw_core STATIC
     src/engine/EngineInfo.cpp
     src/engine/SineToneEdit.cpp
     src/engine/SineDemoSession.cpp
+    src/engine/ArrangementEdit.cpp
+    src/engine/ClipImporter.cpp
     src/rt/RealtimeGuard.cpp)
 
 target_include_directories(daw_core PUBLIC
@@ -203,7 +205,8 @@ if(DAW_BUILD_TESTS)
         tests/SanityTest.cpp
         tests/RtSpscQueueTest.cpp
         tests/RtGuardTest.cpp
-        tests/render/SineRenderTest.cpp)
+        tests/render/SineRenderTest.cpp
+        tests/render/ImportClipRenderTest.cpp)
 
     # tests/render/ headers include themselves via the "render/" prefix.
     target_include_directories(daw_tests PRIVATE
