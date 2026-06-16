@@ -329,6 +329,27 @@ goes silent; gain −6 dB → body −15.03 dBFS; fade-in 0.4 s → clip start (
 below steady state (−9.0 dBFS); delete → track clip count → 0. Gate: `ctest --preset dev`
 **12/12 green, 18.0 s** (ClipOps test ~6.8 s).
 
+## 2026-06-15 — Phase 1 Chunk 3: undo/redo null test (perfect null)
+
+`src/engine/EditUndo.{h,cpp}` — undo/redo facade over `edit.getUndoManager()`
+(`undo`/`redo`/`canUndo`/`canRedo`/`clearUndoHistory`) for the UI's Undo/Redo commands,
+plus `ensureUndoManagerReady`. GUI-free (forward-declared `te::Edit`).
+
+**Engine gotcha (from the engine's own MidiList test):** an Edit attaches its
+`UndoManager` via an **async message**, so a headless caller that mutates the Edit before
+the message loop has run records **nothing** for undo. Fix: pump the loop once after
+build/load (`MessageManager::runDispatchLoopUntil(20)`) — that's `ensureUndoManagerReady`.
+A running GUI pumps continuously so it never needs it. With that pump + one
+`beginNewTransaction` per gesture (Chunk 2), clip ops are recorded automatically (their
+ValueTree mutations go through the Edit's UndoManager) — they take **no** explicit
+`UndoManager*` argument, unlike MIDI note ops which do.
+
+**Null test** `tests/render/UndoNullRenderTest.cpp` `[render]`: render baseline → move +
+gain gestures (render differs by −6 dBFS) → undo,undo → re-render is a **perfect −200 dBFS
+null** vs baseline → redo,redo → **perfect −200 dBFS null** vs the changed render. Added
+`peakDiffDbfs` to RenderHelpers (max abs per-sample diff in dBFS; size mismatch = 0 dBFS so
+it fails loudly). Gate: `ctest --preset dev` **13/13 green, 22.3 s**.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)

@@ -135,6 +135,27 @@ regionView (juce::AudioBuffer<float>& buffer, int startSample, int numSamples)
                                      buffer.getNumChannels(), startSample, numSamples);
 }
 
+/** Peak absolute per-sample difference between two equally-sized buffers, in dBFS.
+    The workhorse of a null test: render path A and path B, subtract, and assert the
+    residual is essentially silence (peak diff < -96 dBFS). Returns -inf for a perfect
+    null. If the buffers differ in size/channels, compares the overlapping region and
+    counts the size mismatch as full-scale (returns 0 dBFS) so the test fails loudly. */
+inline float peakDiffDbfs (const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b)
+{
+    if (a.getNumChannels() != b.getNumChannels() || a.getNumSamples() != b.getNumSamples())
+        return 0.0f; // full-scale: shapes differ, not a null
+
+    float peak = 0.0f;
+    for (int ch = 0; ch < a.getNumChannels(); ++ch)
+    {
+        const float* pa = a.getReadPointer (ch);
+        const float* pb = b.getReadPointer (ch);
+        for (int i = 0; i < a.getNumSamples(); ++i)
+            peak = juce::jmax (peak, std::abs (pa[i] - pb[i]));
+    }
+    return juce::Decibels::gainToDecibels (peak, -200.0f);
+}
+
 /** True if any sample in the buffer is NaN or Inf. */
 inline bool hasNonFinite (const juce::AudioBuffer<float>& buffer)
 {

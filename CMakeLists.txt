@@ -129,6 +129,7 @@ add_library(daw_core STATIC
     src/engine/ArrangementEdit.cpp
     src/engine/ClipImporter.cpp
     src/engine/ClipOps.cpp
+    src/engine/EditUndo.cpp
     src/rt/RealtimeGuard.cpp)
 
 target_include_directories(daw_core PUBLIC
@@ -208,7 +209,8 @@ if(DAW_BUILD_TESTS)
         tests/RtGuardTest.cpp
         tests/render/SineRenderTest.cpp
         tests/render/ImportClipRenderTest.cpp
-        tests/render/ClipOpsRenderTest.cpp)
+        tests/render/ClipOpsRenderTest.cpp
+        tests/render/UndoNullRenderTest.cpp)
 
     # tests/render/ headers include themselves via the "render/" prefix.
     target_include_directories(daw_tests PRIVATE
