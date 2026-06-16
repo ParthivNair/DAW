@@ -350,6 +350,32 @@ null** vs baseline → redo,redo → **perfect −200 dBFS null** vs the changed
 `peakDiffDbfs` to RenderHelpers (max abs per-sample diff in dBFS; size mismatch = 0 dBFS so
 it fails loudly). Gate: `ctest --preset dev` **13/13 green, 22.3 s**.
 
+## 2026-06-15 — Phase 1 Chunk 4: ProjectSession (.tracktionedit lifecycle)
+
+`src/engine/ProjectSession.{h,cpp}` — GUI-free new/open/save/saveAs over a
+`.tracktionedit`, dirty-state, and a recents list. The canonical engine pattern (from
+RecordingDemo/MidiRecordingDemo): `existsAsFile() ? loadEditFromFile : createEmptyEdit`,
+then `edit->editFileRetriever = [file]{ return file; }`, save via
+`EditFileOperations(*edit).save(true, true, false)`. Dirty = `hasChangedSinceSaved()`;
+save resets it; `newProject` calls `markAsChanged()` (a new project is unsaved).
+
+- **`flushState()` before save** — `save()` does not guarantee CachedValues (clip gain,
+  fades) are pushed into the state tree, so ProjectSession::save calls `edit->flushState()`
+  first. Without it a round-trip can drop a recently-set gain. (The Chunk-4 null test is
+  the detector; with the flush the round-trip is a perfect null.)
+- **Recents is GUI-free.** `juce::RecentlyOpenedFilesList` lives in **juce_gui_extra**,
+  which daw_core must not link, so `src/engine/RecentFilesList.h` is a tiny header-only
+  MRU list (newest-first, dedup, capped, newline persistence) the UI renders into a menu.
+- `configureArrangementTracks` extracted from `buildArrangementEdit` so both the fileless
+  builder (createSingleTrackEdit) and `newProject` (createEmptyEdit) share the
+  "N tracks + neutral gains" shape.
+
+**Render test** `tests/render/ProjectRoundTripRenderTest.cpp` `[render]`: newProject(2
+tracks) + import clip + gain −6 dB → dirty true; render bufA; save → dirty false, file on
+disk, in recents; **reopen in a fresh ProjectSession** → 2 tracks + 1 clip at the right
+position; render bufB → **perfect −200 dBFS null** vs bufA. Plus: open of a missing file
+returns false and leaves no edit. Gate: `ctest --preset dev` **14/14 green, 29.5 s**.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)

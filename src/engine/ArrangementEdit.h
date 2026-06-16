@@ -35,4 +35,10 @@ namespace daw
 std::unique_ptr<tracktion::engine::Edit> buildArrangementEdit (tracktion::engine::Engine&,
                                                                int numAudioTracks = 1,
                                                                EditPurpose        = EditPurpose::livePlayback);
+
+/** Brings an existing Edit up to `numAudioTracks` audio tracks (ensureNumberOfAudioTracks)
+    and neutralises master + per-track volume to unity. Shared by buildArrangementEdit and
+    ProjectSession::newProject (which start from createSingleTrackEdit / createEmptyEdit
+    respectively) so the "blank arrangement" shape is defined in one place. */
+void configureArrangementTracks (tracktion::engine::Edit&, int numAudioTracks);
 } // namespace daw
