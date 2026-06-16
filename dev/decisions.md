@@ -421,6 +421,35 @@ round-trip, zoom-about-anchor, scroll, follow); `[render]` musical case at a pin
 1.8 s→2.0 s renders silent up to the bar (−200 dBFS) then tone (−9.03 dBFS), tying the
 snap maths to audio. Gate: `ctest --preset dev` **17/17 green, 37.0 s**.
 
+## 2026-06-15 — Phase 1 Chunk 7: daw_ui lib + timeline components + snapshot test
+
+The GUI begins. New **`daw_ui`** STATIC lib holds the Component/Graphics code that cannot
+live in the GUI-free `daw_core`: `ClipComponent` (clip body + name + waveform via
+`te::SmartThumbnail`), `TimeRulerComponent` (bar/beat grid + bar numbers from the
+TempoSequence), `TimelineComponent` (track lanes + playhead, hosts a ClipComponent per clip
+positioned from the TimelineViewModel). `daw_ui` links `daw_core` **PUBLIC** — which
+re-exports (via `daw_engine`) the JUCE GUI modules already amalgamated into
+`libdaw_engine.a`, so daw_ui recompiles **no** JUCE module sources and safely carries the UI
+PCH (same trick that lets EZStudio link only daw_core). EZStudio now links `daw_ui`; its
+`Main.cpp` shows the timeline over a 4-track Edit.
+
+**Test target decision (option a):** a separate GUI-capable `daw_ui_tests` executable
+(links daw_ui) hosts the `createComponentSnapshot` regression, so a font/AA difference can
+never block the headless `[render]` gate that `daw_tests` runs. **macOS-only** —
+`createComponentSnapshot` renders offscreen via CoreGraphics with no window server, but
+JUCE GUI init on the headless Linux CI runner has no X display; Linux still *compiles*
+daw_ui + EZStudio as a cross-check, just doesn't run the snapshot (xvfb is the alternative
+if we ever want it).
+
+**Snapshot test** `tests/ui/TimelineSnapshotTest.cpp` `[snapshot]`: a known clip at 1.0 s →
+its ClipComponent bounds equal `timeToX(start)`/`timeToX(end)` (±1 px), and a real
+`createComponentSnapshot` shows clip-coloured pixels at the clip's column vs grey lane
+before it — geometry/pixel invariants, **not** a golden PNG (deliberately, to stay
+machine-independent). Engine gotcha re-confirmed: a synth-only edit (`buildSineToneEdit`)
+has `getLength()==0`, so `exportEditToWav` needs an explicit `endSecs` for it (real
+arrangements have a non-zero length). Gate: `ctest --preset dev` **18/18 green, 38.6 s**;
+EZStudio smoke-launches and shows the timeline without crashing.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)

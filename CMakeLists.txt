@@ -162,6 +162,29 @@ target_precompile_headers(daw_core PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/engine/DawCorePCH.h")
 
 # ============================================================================
+#  daw_ui — STATIC lib of timeline GUI components (Component/Graphics code that
+#  cannot live in the GUI-free daw_core: SmartThumbnail, ClipComponent, ...).
+#  Links daw_core PUBLIC, which re-exports (via daw_engine) the JUCE GUI modules
+#  already amalgamated into libdaw_engine.a — so daw_ui recompiles NO JUCE module
+#  sources and can safely carry the UI PCH. Both EZStudio and daw_ui_tests link it.
+# ============================================================================
+add_library(daw_ui STATIC
+    src/ui/ClipComponent.cpp
+    src/ui/TimeRulerComponent.cpp
+    src/ui/TimelineComponent.cpp)
+
+target_compile_features(daw_ui PUBLIC cxx_std_20)
+target_link_libraries(daw_ui PUBLIC daw_core)
+target_link_libraries(daw_ui PRIVATE juce::juce_recommended_warning_flags)
+
+target_precompile_headers(daw_ui PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/EZStudioPCH.h")
+
+if(APPLE)
+    target_compile_options(daw_ui PRIVATE "-fno-aligned-allocation")
+endif()
+
+# ============================================================================
 #  EZStudio — the GUI application
 # ============================================================================
 juce_add_gui_app(EZStudio
@@ -184,7 +207,7 @@ set_target_properties(EZStudio PROPERTIES
 # recompile any JUCE module source — which is also what lets EZStudio carry a PCH
 # (no JUCE module amalgamation .mm files land in this target to conflict with it).
 target_link_libraries(EZStudio PRIVATE
-    daw_core
+    daw_ui
     juce::juce_recommended_warning_flags)
 
 target_precompile_headers(EZStudio PRIVATE
@@ -239,6 +262,40 @@ if(DAW_BUILD_TESTS)
 
     include(Catch)
     catch_discover_tests(daw_tests)
+
+    # ------------------------------------------------------------------------
+    #  daw_ui_tests — GUI-capable test runner for the timeline Components.
+    #  Links daw_ui (Component/Graphics code daw_tests must not pull in) and runs
+    #  createComponentSnapshot regressions. Separate executable so a font/AA
+    #  difference in a snapshot can never block the headless [render] gate. The
+    #  process-wide ScopedJuceInitialiser_GUI (tests/TestMain.cpp) is what makes
+    #  createComponentSnapshot work without a window.
+    #
+    #  macOS only: createComponentSnapshot renders offscreen via CoreGraphics with
+    #  no window server, but JUCE's GUI init on the headless Linux CI runner has no
+    #  X display. Linux is the cheap engine cross-check anyway; it still COMPILES
+    #  daw_ui + EZStudio (so the components are build-checked there), just doesn't
+    #  run the snapshot. (xvfb on the Linux lane is the alternative if wanted.)
+    # ------------------------------------------------------------------------
+    if(APPLE)
+        add_executable(daw_ui_tests
+            tests/TestMain.cpp
+            tests/ui/TimelineSnapshotTest.cpp)
+
+        target_include_directories(daw_ui_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+
+        target_compile_features(daw_ui_tests PRIVATE cxx_std_20)
+
+        target_link_libraries(daw_ui_tests PRIVATE
+            daw_ui
+            Catch2::Catch2WithMain
+            juce::juce_recommended_warning_flags)
+
+        target_compile_options(daw_ui_tests PRIVATE "-fno-aligned-allocation")
+
+        catch_discover_tests(daw_ui_tests)
+    endif()
 endif()
 
 # ============================================================================
