@@ -16,6 +16,7 @@ Presets: `dev` (Debug, native arm64), `release` (universal2), `rtsan` (Homebrew 
 - Single test: `build/dev/daw_tests "[tag]"`     (e.g. `"[sanity]"`; Catch2 tag filter)
 - RT-hazard grep gate: `tools/rt-tripwire.sh`    (scans `src/engine/dsp/`; CI runs it too)
 - Fresh clone bootstrap: `tools/bootstrap.sh`
+- Build + launch the app: `tools/run.sh`          (`tools/run.sh release` for the universal build)
 
 `compile_commands.json` lands in `build/dev/` for clangd. Configure symlinks `libs/rubberband`
 into the engine's `modules/3rd_party/`; that link is regenerated per build dir, never committed.

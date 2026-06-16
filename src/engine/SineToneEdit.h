@@ -1,5 +1,7 @@
 #pragma once
 
+#include "EditPurpose.h"
+
 #include <juce_core/juce_core.h>
 #include <memory>
 
@@ -26,21 +28,6 @@ struct SineToneSpec
     double frequencyHz  = 440.0; ///< Tone Generator frequency.
     float levelLinear   = 0.5f;  ///< Tone Generator level (linear amplitude of the sine).
     double durationSecs = 1.5;   ///< Length of the tone region.
-};
-
-/** What the Edit is for. This maps to the engine's Edit::EditRole, but is declared
-    here (instead of taking an Edit::EditRole) so this header stays free of the heavy
-    tracktion include — it is pulled into the UI via SineDemoSession.h.
-
-    - livePlayback maps to Edit::forEditing, which creates an EditPlaybackContext so
-      the transport can drive the output device. **Required for live sound** — the
-      forRendering role sets playDisabled and produces no device output.
-    - offlineRender maps to Edit::forRendering (no playback context), used by the
-      render test, which renders offline via RenderTask. */
-enum class EditPurpose
-{
-    livePlayback,
-    offlineRender
 };
 
 /** Builds a fresh Edit (single audio track) carrying a ToneGeneratorPlugin set to

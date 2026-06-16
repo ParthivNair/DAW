@@ -264,6 +264,243 @@ offline render test could not catch (it renders via `RenderTask`, never the live
 Fix verified: 10/10 ctest still green, render test unchanged, Play/Stop audibly correct.
 This closes the last Phase 0 box — **Phase 0 is fully complete.**
 
+## 2026-06-15 — Phase 1 Chunk 1: ArrangementEdit + audio-file import
+
+Phase 1 (timeline MVP) starts. Architecture mirrors Phase 0's winning split: the
+GUI-free arrangement *model* lives in `daw_core` (`src/engine/`) and is render-tested
+headlessly; the GUI shell (Phase-1 later chunks) just drives it. New this chunk:
+
+- **`EditPurpose` extracted** from `SineToneEdit.h` into `src/engine/EditPurpose.h` (the
+  `livePlayback`/`offlineRender` enum) so the arrangement model + UI share it without
+  coupling to the sine demo. The Edit-builder `.cpp`s map it to `Edit::EditRole` locally,
+  so the header still pulls in zero tracktion types.
+- **`buildArrangementEdit(engine, numAudioTracks, purpose)`** — multi-track blank Edit via
+  `createSingleTrackEdit` + `ensureNumberOfAudioTracks`, master + per-track volume
+  neutralised to unity (only clip-level edits show up in a render).
+- **`importAudioFileAsClip(track, file, startSecs, deleteExisting)`** — validates
+  `te::AudioFile(engine,file).isValid()` then `track.insertWaveClip(name, file,
+  ClipPosition{{start, len}, {}}, deleteExisting)`. The **member** `insertWaveClip` taking a
+  `juce::File` (not the `ClipOwner` free function, not a `ProjectItemID`) is the demo form.
+  `TimePosition`/`TimeDuration` live in `tracktion::` (core), NOT `tracktion::engine::`.
+
+**Gotcha that binds every future wave-clip render test (hard-won here):** the headless
+`renderEditToWav` tight pump `while (task.runJob()==jobNeedsRunningAgain){}` is fine for a
+tone/synth (no file I/O) but **~20× too slow for a clip that reads audio off disk** — a
+3.5 s wave render took **65 s** because the tight loop starves the engine's
+`AudioFileManager`/cache async file reads of message-thread time. Fix: pump the message
+loop a slice between blocks (`MessageManager::runDispatchLoopUntil(1)`, allowed because
+`JUCE_MODAL_LOOPS_PERMITTED=1`). This mirrors the engine's own
+`renderToAudioBufferDispatchingMessageThread`. After the fix the same render is **3.0 s**.
+`RenderHelpers.h` now does this for all render tests; also added `regionRmsDbfs` +
+`regionView` helpers (silence-before-clip and clip-body assertions).
+
+**Render test** `tests/render/ImportClipRenderTest.cpp` `[render]`: render a 440 Hz tone to a
+temp WAV, import it at t=2.0 s on a 4-track arrangement, render the whole edit, assert
+(a) pre-clip region silent (−200 dBFS), (b) clip body 440 Hz at the source's −9.03 dBFS RMS,
+(c) finite + body filled, (d) a missing-file import returns nullptr. Gate: `ctest --preset
+dev` **11/11 green, 11.1 s** (import test 3.0 s); the Phase-0 tone render is unchanged at 2.4 s.
+
+## 2026-06-15 — Phase 1 Chunk 2: ClipOps (move/trim/offset/gain/fades/delete)
+
+GUI-free clip-edit operations in `src/engine/ClipOps.{h,cpp}` — the engine half of the
+timeline's clip interactions, render-tested before any drag handle exists. Each op opens
+its own undo transaction (`edit.getUndoManager().beginNewTransaction(name)`) so one
+gesture == one undo step (the round-trip is proven by Chunk 3). Verified engine setters:
+
+- `moveClip` → `Clip::setStart(pos, preserveSync=false, keepLength=true)` (source moves
+  with the clip; same audio plays at the new position — confirmed by render).
+- `setClipLength` → `Clip::setLength(dur, preserveSync=false)`; `setClipOffset` →
+  `Clip::setOffset(dur)`; `deleteClip` → `Clip::removeFromParent()`.
+- `setClipGainDb` → `AudioClipBase::setGainDB`; fades → `setFadeIn/Out` +
+  `setFadeInType/OutType` (`AudioFadeCurve::Type` 1=linear…4=sCurve, mapped from a
+  header-local `daw::FadeCurve` enum so ClipOps.h stays engine-free); `applyClipEdgeFades`.
+
+**Upstream engine bug found (same class as the Spike 2 LoopInfo bug):**
+`AudioClipBase::setFadeIn`/`setFadeOut` (`tracktion_AudioClipBase.cpp:511`) **always
+return `false`** even on success — the no-overrun branch does `fadeIn = in; return false;`
+and the function falls through to `return false`. The fade IS applied; only the bool is
+wrong. So `daw::setClipFadeIn/Out` return **void**; verify via `getFadeIn()` and a render,
+never the engine's bool. (Worth reporting on the Tracktion forum alongside the LoopInfo bug.)
+
+**Render test** `tests/render/ClipOpsRenderTest.cpp` `[render]` (one source tone rendered
+once, re-imported per section): move → tone appears at the new start, region before it
+silent, body still 440 Hz at −9.03 dBFS; trim → tail where the untrimmed clip used to play
+goes silent; gain −6 dB → body −15.03 dBFS; fade-in 0.4 s → clip start (−22.8 dBFS) well
+below steady state (−9.0 dBFS); delete → track clip count → 0. Gate: `ctest --preset dev`
+**12/12 green, 18.0 s** (ClipOps test ~6.8 s).
+
+## 2026-06-15 — Phase 1 Chunk 3: undo/redo null test (perfect null)
+
+`src/engine/EditUndo.{h,cpp}` — undo/redo facade over `edit.getUndoManager()`
+(`undo`/`redo`/`canUndo`/`canRedo`/`clearUndoHistory`) for the UI's Undo/Redo commands,
+plus `ensureUndoManagerReady`. GUI-free (forward-declared `te::Edit`).
+
+**Engine gotcha (from the engine's own MidiList test):** an Edit attaches its
+`UndoManager` via an **async message**, so a headless caller that mutates the Edit before
+the message loop has run records **nothing** for undo. Fix: pump the loop once after
+build/load (`MessageManager::runDispatchLoopUntil(20)`) — that's `ensureUndoManagerReady`.
+A running GUI pumps continuously so it never needs it. With that pump + one
+`beginNewTransaction` per gesture (Chunk 2), clip ops are recorded automatically (their
+ValueTree mutations go through the Edit's UndoManager) — they take **no** explicit
+`UndoManager*` argument, unlike MIDI note ops which do.
+
+**Null test** `tests/render/UndoNullRenderTest.cpp` `[render]`: render baseline → move +
+gain gestures (render differs by −6 dBFS) → undo,undo → re-render is a **perfect −200 dBFS
+null** vs baseline → redo,redo → **perfect −200 dBFS null** vs the changed render. Added
+`peakDiffDbfs` to RenderHelpers (max abs per-sample diff in dBFS; size mismatch = 0 dBFS so
+it fails loudly). Gate: `ctest --preset dev` **13/13 green, 22.3 s**.
+
+## 2026-06-15 — Phase 1 Chunk 4: ProjectSession (.tracktionedit lifecycle)
+
+`src/engine/ProjectSession.{h,cpp}` — GUI-free new/open/save/saveAs over a
+`.tracktionedit`, dirty-state, and a recents list. The canonical engine pattern (from
+RecordingDemo/MidiRecordingDemo): `existsAsFile() ? loadEditFromFile : createEmptyEdit`,
+then `edit->editFileRetriever = [file]{ return file; }`, save via
+`EditFileOperations(*edit).save(true, true, false)`. Dirty = `hasChangedSinceSaved()`;
+save resets it; `newProject` calls `markAsChanged()` (a new project is unsaved).
+
+- **`flushState()` before save** — `save()` does not guarantee CachedValues (clip gain,
+  fades) are pushed into the state tree, so ProjectSession::save calls `edit->flushState()`
+  first. Without it a round-trip can drop a recently-set gain. (The Chunk-4 null test is
+  the detector; with the flush the round-trip is a perfect null.)
+- **Recents is GUI-free.** `juce::RecentlyOpenedFilesList` lives in **juce_gui_extra**,
+  which daw_core must not link, so `src/engine/RecentFilesList.h` is a tiny header-only
+  MRU list (newest-first, dedup, capped, newline persistence) the UI renders into a menu.
+- `configureArrangementTracks` extracted from `buildArrangementEdit` so both the fileless
+  builder (createSingleTrackEdit) and `newProject` (createEmptyEdit) share the
+  "N tracks + neutral gains" shape.
+
+**Render test** `tests/render/ProjectRoundTripRenderTest.cpp` `[render]`: newProject(2
+tracks) + import clip + gain −6 dB → dirty true; render bufA; save → dirty false, file on
+disk, in recents; **reopen in a fresh ProjectSession** → 2 tracks + 1 clip at the right
+position; render bufB → **perfect −200 dBFS null** vs bufA. Plus: open of a missing file
+returns false and leaves no edit. Gate: `ctest --preset dev` **14/14 green, 29.5 s**.
+
+## 2026-06-15 — Phase 1 Chunk 5: ArrangementRenderer (export to WAV)
+
+`src/engine/ArrangementRenderer.{h,cpp}` — `exportEditToWav(edit, dest, ExportOptions)`,
+the GUI-free service behind the timeline's Export command. Same technique as
+RenderHelpers (Renderer::RenderTask inline pump + message-loop slice between blocks for
+wave clips) but a production-facing API: `ExportOptions{sampleRate, bitDepth, blockSize,
+useMasterPlugins=true, failIfSilent, startSecs, endSecs<0=whole edit}` →
+`ExportResult{success, errorMessage, lengthSeconds}`.
+
+Kept **separate** from RenderHelpers (which stays a test fixture) so the passing render
+tests are byte-for-byte unaffected. Note the engine `Renderer::Parameters` defaults:
+`useMasterPlugins=false`, `usePlugins=true`, `canRenderInMono=true`,
+`checkNodesForAudio=true` — so the exporter sets `useMasterPlugins` from options (defaults
+**true**: a user's export should include the master fader, unlike the test fixture).
+
+**Render test** `tests/render/ExportRenderTest.cpp` `[render]`: a two-clip arrangement
+exported at 48k and 44.1k → both clips read back as 440 Hz, correct file sample rate,
+length ≈ clip-B end, finite, errorMessage empty; and with the master cut −6 dB,
+`useMasterPlugins=true` yields −15.03 dBFS vs `false` yields −9.03 dBFS. Gate:
+`ctest --preset dev` **15/15 green, 32.5 s**.
+
+## 2026-06-15 — Phase 1 Chunk 6: TimelineViewModel + TransportModel
+
+GUI-free presentation model so the timeline UI stays dumb and the maths is unit-testable:
+
+- **`TimelineViewModel`** (`src/engine/TimelineViewModel.h`, header-only, **engine-free**):
+  pure pixel<->time mapping over a visible window + width — `timeToX`/`xToTime` (round-trip
+  < 1 px), `zoomBy(factor, anchorX)` (keeps the time under the anchor fixed),
+  `scrollByPixels`, `followPlayhead` (auto-follow when the playhead crosses the right
+  margin). Testable with plain asserts, no engine/GUI.
+- **Musical helpers** (`TimelineViewModel.cpp`, take `te::Edit&`): `snapSecondsToBar`/
+  `snapSecondsToBeat` via `tempoSequence.toBeats`/`toTime` (round to the nearest beat
+  multiple; bar = nearest multiple of the time-sig numerator), `barsBeatsText` (1-based
+  "bar|beat" from `tempo::BarsAndBeats`), `minSecText`.
+- **`TransportModel`** (`src/engine/TransportModel.{h,cpp}`): play/stop/togglePlay/loop/
+  position over `Edit::getTransport()` (`ensureContextAllocated`+`play(false)`;
+  `stop(false,false)` — clips follow the playhead, so no clearDevices teardown needed,
+  unlike the Phase 0 continuous tone) + the bars:beats / min:sec readouts.
+
+**Tests** `tests/render/TimelineMappingTest.cpp`: `[timeline]` pure-math case (mapping
+round-trip, zoom-about-anchor, scroll, follow); `[render]` musical case at a pinned 120 bpm
+4/4 (beat 0.5 s, bar 2 s) — bars:beats/min:sec/snap values exact, and a clip snapped
+1.8 s→2.0 s renders silent up to the bar (−200 dBFS) then tone (−9.03 dBFS), tying the
+snap maths to audio. Gate: `ctest --preset dev` **17/17 green, 37.0 s**.
+
+## 2026-06-15 — Phase 1 Chunk 7: daw_ui lib + timeline components + snapshot test
+
+The GUI begins. New **`daw_ui`** STATIC lib holds the Component/Graphics code that cannot
+live in the GUI-free `daw_core`: `ClipComponent` (clip body + name + waveform via
+`te::SmartThumbnail`), `TimeRulerComponent` (bar/beat grid + bar numbers from the
+TempoSequence), `TimelineComponent` (track lanes + playhead, hosts a ClipComponent per clip
+positioned from the TimelineViewModel). `daw_ui` links `daw_core` **PUBLIC** — which
+re-exports (via `daw_engine`) the JUCE GUI modules already amalgamated into
+`libdaw_engine.a`, so daw_ui recompiles **no** JUCE module sources and safely carries the UI
+PCH (same trick that lets EZStudio link only daw_core). EZStudio now links `daw_ui`; its
+`Main.cpp` shows the timeline over a 4-track Edit.
+
+**Test target decision (option a):** a separate GUI-capable `daw_ui_tests` executable
+(links daw_ui) hosts the `createComponentSnapshot` regression, so a font/AA difference can
+never block the headless `[render]` gate that `daw_tests` runs. **macOS-only** —
+`createComponentSnapshot` renders offscreen via CoreGraphics with no window server, but
+JUCE GUI init on the headless Linux CI runner has no X display; Linux still *compiles*
+daw_ui + EZStudio as a cross-check, just doesn't run the snapshot (xvfb is the alternative
+if we ever want it).
+
+**Snapshot test** `tests/ui/TimelineSnapshotTest.cpp` `[snapshot]`: a known clip at 1.0 s →
+its ClipComponent bounds equal `timeToX(start)`/`timeToX(end)` (±1 px), and a real
+`createComponentSnapshot` shows clip-coloured pixels at the clip's column vs grey lane
+before it — geometry/pixel invariants, **not** a golden PNG (deliberately, to stay
+machine-independent). Engine gotcha re-confirmed: a synth-only edit (`buildSineToneEdit`)
+has `getLength()==0`, so `exportEditToWav` needs an explicit `endSecs` for it (real
+arrangements have a non-zero length). Gate: `ctest --preset dev` **18/18 green, 38.6 s**;
+EZStudio smoke-launches and shows the timeline without crashing.
+
+## 2026-06-15 — Phase 1 Chunk 8: interactive app shell (transport, clips, import, menus)
+
+The app becomes usable. New `daw_ui` components: **`TransportBarComponent`** (play/stop/loop
++ bars:beats/min:sec readout bound to TransportModel; a 30 Hz Timer publishes the playhead
+for the timeline to draw + auto-follow) and **`ArrangementView`** — the controller hosting
+the ruler + lanes with all interactions: Finder **drag-and-drop import**
+(FileDragAndDropTarget), clip **select / drag-move (beat-snapped) / edge-trim / right-click
+menu** (delete / fades / gain ±3 dB) / **delete key**, and **mouse-wheel zoom & scroll**.
+Every mutation routes through ClipOps/ClipImporter (undoable) then relays out from the model
+— the view never owns arrangement truth. `ClipComponent` grew a mouse drag state machine
+(body=move, edges=trim, popup-modifier=right-click) that previews by moving its own bounds
+and reports the final time(s) to the view; it also draws fade ramps. New ClipOps:
+`trimClipLeftTo` (setStart preserveSync=true, keepLength=false).
+
+`Main.cpp` is now the full app: `AppComponent` (MenuBarModel) owns the engine (device
+initialised for live playback), a `ProjectSession`, and rebuilds the transport+arrangement
+UI whenever the project changes (New/Open swap the Edit, which is held by reference). Menus:
+File (New/Open/Save/Save As/**Export WAV** via ArrangementRenderer), Edit (Undo/Redo/Delete),
+View (Snap toggle); async juce::FileChoosers for open/save/export.
+
+**Gesture test** `tests/ui/ClipGestureTest.cpp` `[snapshot]` (daw_ui_tests, macOS-only):
+drives ArrangementView's gesture seams (not raw mouse) at a pinned 120 bpm 4/4 — import →
+clip exists; move 3.1 s → snaps to 3.0 s, model start moves, the `createComponentSnapshot`
+shows clip pixels at the new `timeToX` column, and **undo reverts to 2.0 s**; trim-right →
+length 0.5 s; fade-in → model fade set; delete → clip gone. Gate: `ctest --preset dev`
+**19/19 green, 43.9 s**; EZStudio launches, opens the default output device, builds a
+4-track project, and shows the transport + timeline without crashing.
+
+## 2026-06-15 — Phase 1 closeout: timeline/arrangement MVP complete (all [CC] tasks)
+
+Phase 1 landed in eight verified chunks on branch `claude/vigilant-turing-4dc113`, each one
+commit gated independently by `cmake --preset dev && cmake --build --preset dev && ctest
+--preset dev` plus its render/snapshot test. Architecture held to the Phase 0 win: a
+GUI-free arrangement **model** in `daw_core` (ArrangementEdit, ClipImporter, ClipOps,
+EditUndo, ProjectSession, ArrangementRenderer, TimelineViewModel, TransportModel) — all
+render-tested with perfect −200 dBFS nulls for undo/redo and save/load — under a thin
+`daw_ui` shell (timeline components + interactions) driving it.
+
+**Phase 1 checks (dev/TODO.md) — all green:**
+- Tolerance golden render tests for clip placement / trim / gain (peak nulls well under
+  −96 dBFS; exact RMS/frequency within tolerance).
+- Undo+redo round-trip **null test**: perfect −200 dBFS (ImportClip/ClipOps/UndoNull).
+- `createComponentSnapshot` timeline regression (geometry + pixel invariants, macOS lane).
+- Full suite **19/19, 43.9 s** (< 1-minute budget); RT tripwire clean; EZStudio smoke-OK.
+
+**[You] acceptance remaining (manual listen):** launch EZStudio, drag a few loops onto a
+lane, move/trim/fade them, play, Export WAV, and confirm by ear — then note any friction in
+`dev/feedback.md`. Computer-use couldn't drive the unsigned dev build (LaunchServices
+doesn't index build artefacts), so the assembled-app visual is verified via the snapshot +
+gesture pixel tests rather than a live screenshot.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)

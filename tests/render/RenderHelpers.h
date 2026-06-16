@@ -48,8 +48,19 @@ renderEditToWav (te::Edit& edit, double lengthSecs, double sampleRate, int block
     params.checkNodesForAudio = true;
 
     te::Renderer::RenderTask task ("render_test", params, nullptr, nullptr);
+
+    // Pump the render to completion. Between blocks we give the message thread a brief
+    // slice so the engine's AudioFileManager/cache can service a wave clip's async file
+    // reads. A tone/synth source needs no file I/O, so Phase 0's tight loop sufficed;
+    // a clip that reads audio off disk would otherwise starve those async operations
+    // and the render crawls (~20x slower). This mirrors the engine's own
+    // renderToAudioBufferDispatchingMessageThread. JUCE_MODAL_LOOPS_PERMITTED=1 (set in
+    // CMake) is what allows runDispatchLoopUntil here, on the test's message thread.
+    auto* mm = juce::MessageManager::getInstanceWithoutCreating();
     while (task.runJob() == juce::ThreadPoolJob::jobNeedsRunningAgain)
     {
+        if (mm != nullptr)
+            mm->runDispatchLoopUntil (1);
     }
 
     jassert (task.errorMessage.isEmpty());
@@ -91,6 +102,58 @@ inline float rmsDbfs (const juce::AudioBuffer<float>& buffer, int channel, int e
 
     const float rms = buffer.getRMSLevel (channel, start, len);
     return juce::Decibels::gainToDecibels (rms, -200.0f);
+}
+
+/** RMS of one channel over an explicit sample range, expressed in dBFS. Clamps the
+    range to the buffer. Returns -inf for an empty range. Used to assert that a region
+    is silent (e.g. before a clip's start) or to measure a clip body's steady-state
+    level when the signal does not fill the whole render. */
+inline float regionRmsDbfs (const juce::AudioBuffer<float>& buffer, int channel,
+                            int startSample, int numSamples)
+{
+    const int n = buffer.getNumSamples();
+    startSample = juce::jlimit (0, n, startSample);
+    numSamples  = juce::jlimit (0, n - startSample, numSamples);
+    if (numSamples <= 0)
+        return -std::numeric_limits<float>::infinity();
+
+    const float rms = buffer.getRMSLevel (channel, startSample, numSamples);
+    return juce::Decibels::gainToDecibels (rms, -200.0f);
+}
+
+/** A non-owning AudioBuffer view over [startSample, startSample+numSamples) of
+    `buffer`, so the existing whole-buffer helpers (rmsDbfs, dominantFrequency) can be
+    pointed at a sub-range — e.g. the body of a clip that sits partway through a
+    render. Shares samples with the parent; valid only while the parent lives. */
+inline juce::AudioBuffer<float>
+regionView (juce::AudioBuffer<float>& buffer, int startSample, int numSamples)
+{
+    const int n = buffer.getNumSamples();
+    startSample = juce::jlimit (0, n, startSample);
+    numSamples  = juce::jlimit (0, n - startSample, numSamples);
+    return juce::AudioBuffer<float> (buffer.getArrayOfWritePointers(),
+                                     buffer.getNumChannels(), startSample, numSamples);
+}
+
+/** Peak absolute per-sample difference between two equally-sized buffers, in dBFS.
+    The workhorse of a null test: render path A and path B, subtract, and assert the
+    residual is essentially silence (peak diff < -96 dBFS). Returns -inf for a perfect
+    null. If the buffers differ in size/channels, compares the overlapping region and
+    counts the size mismatch as full-scale (returns 0 dBFS) so the test fails loudly. */
+inline float peakDiffDbfs (const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b)
+{
+    if (a.getNumChannels() != b.getNumChannels() || a.getNumSamples() != b.getNumSamples())
+        return 0.0f; // full-scale: shapes differ, not a null
+
+    float peak = 0.0f;
+    for (int ch = 0; ch < a.getNumChannels(); ++ch)
+    {
+        const float* pa = a.getReadPointer (ch);
+        const float* pb = b.getReadPointer (ch);
+        for (int i = 0; i < a.getNumSamples(); ++i)
+            peak = juce::jmax (peak, std::abs (pa[i] - pb[i]));
+    }
+    return juce::Decibels::gainToDecibels (peak, -200.0f);
 }
 
 /** True if any sample in the buffer is NaN or Inf. */
