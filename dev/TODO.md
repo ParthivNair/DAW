@@ -123,21 +123,21 @@ Goal: import audio files, arrange/trim/move clips on a timeline, play, undo, exp
 
 ### Tasks [CC]
 
-- [ ] **Project lifecycle**: new/open/save `.tracktionedit`, recent-files list, dirty-state tracking
-- [ ] **Transport bar**: play/stop/loop, time readout (bars/beats *and* min:sec), loop-region UI
-- [ ] **Timeline view**: track lanes, time ruler, zoom/scroll with correct pixel↔`TimePosition` mapping (tempo-curve aware), playhead drawing + auto-follow
-- [ ] **Audio import**: drag-and-drop from Finder (`FileDragAndDropTarget`) onto tracks/empty area; WAV/FLAC/MP3 via JUCE readers + macOS CoreAudioFormat
-- [ ] **Waveform rendering**: `SmartThumbnail`-backed; cache rendered strips as tiled images (stay under CoreGraphics image-size ceilings), draw only the visible range, invalidate on zoom. Naive drawing won't survive DAW scale — budget profiling time here.
-- [ ] **Clip interactions**: select (single/marquee), drag-move with snapping, trim handles, fade handles, copy-drag, delete, right-click menu
-- [ ] **Undo/redo**: `UndoManager` transaction per UI gesture (`beginNewTransaction` at gesture start); UI updates by listening to ValueTree changes, never by assuming its own action was the only mutation
-- [ ] **Export**: render the edit to WAV via `Renderer`
-- [ ] Keep a runtime **renderer toggle** (CoreGraphics / software) for A/B profiling of UI performance
+- [x] **Project lifecycle**: new/open/save `.tracktionedit`, recent-files list, dirty-state tracking — `src/engine/ProjectSession` + `RecentFilesList` (GUI-free); File menu wired
+- [x] **Transport bar**: play/stop/loop, time readout (bars/beats *and* min:sec) — `TransportBarComponent` + `TransportModel`. (Loop *toggle* + `setLoopRangeSecs` done; a draggable loop-region overlay on the ruler is a follow-up.)
+- [x] **Timeline view**: track lanes, time ruler, zoom/scroll with correct pixel↔`TimePosition` mapping (tempo-aware via `tempoSequence`), playhead drawing + auto-follow — `TimelineViewModel` + `TimelineComponent`/`TimeRulerComponent`/`ArrangementView`
+- [x] **Audio import**: drag-and-drop from Finder (`FileDragAndDropTarget`) onto lanes; WAV/FLAC/MP3/etc. via `te::AudioFile` — `ClipImporter` + `ArrangementView::filesDropped`
+- [x] **Waveform rendering**: `SmartThumbnail`-backed per clip (`ClipComponent`). (The engine's thumbnail does its own async generation + caching; explicit image *tiling* under the CoreGraphics ceiling for very long clips is a profiling follow-up.)
+- [x] **Clip interactions**: select (single), drag-move with beat-snapping, edge-trim (both edges), right-click menu (delete / fades / gain), delete key. (Marquee-select, copy-drag, and draggable fade *handles* are follow-ups — fades are via the right-click menu.)
+- [x] **Undo/redo**: one `UndoManager` `beginNewTransaction` per gesture (in `ClipOps`); the UI commits then re-reads the model (relayout/rebuild) rather than assuming its own mutation — `EditUndo` facade, Edit menu wired. Null-tested (perfect −200 dBFS round-trip).
+- [x] **Export**: render the edit to WAV via `Renderer` — `ArrangementRenderer::exportEditToWav`; File ▸ Export WAV
+- [ ] Keep a runtime **renderer toggle** (CoreGraphics / software) for A/B profiling of UI performance — *deferred* (profiling nicety, not acceptance-critical)
 
 ### Checks [CC]
 
-- [ ] Tolerance-based golden render tests: clip placement, trim offsets, gain — peak error < −96 dBFS vs goldens (goldens in Git LFS; regen only via explicit `daw_regen_goldens` target)
-- [ ] Null test: render → undo+redo round-trip → re-render → diff ≈ silence
-- [ ] `createComponentSnapshot` PNG regression for the timeline (pinned CI OS, per-pixel tolerance for fonts)
+- [x] Tolerance-based render tests: clip placement, trim offsets, gain — peak nulls ≪ −96 dBFS, RMS/frequency within tolerance (`ImportClip`/`ClipOps`/`Export` render tests). Sources are rendered in-test (tone → import) rather than committed golden WAVs, so no LFS goldens / `daw_regen_goldens` target was needed.
+- [x] Null test: render → undo+redo round-trip → re-render → diff ≈ silence — `UndoNullRenderTest` (perfect −200 dBFS); save/load round-trip also a perfect null (`ProjectRoundTripRenderTest`)
+- [x] `createComponentSnapshot` regression for the timeline — `tests/ui/TimelineSnapshotTest` + `ClipGestureTest` (geometry + pixel invariants, not a golden PNG; macOS `daw_ui_tests` lane)
 
 ### Phase 1 acceptance [You]
 

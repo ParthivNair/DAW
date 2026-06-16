@@ -171,7 +171,9 @@ target_precompile_headers(daw_core PRIVATE
 add_library(daw_ui STATIC
     src/ui/ClipComponent.cpp
     src/ui/TimeRulerComponent.cpp
-    src/ui/TimelineComponent.cpp)
+    src/ui/TimelineComponent.cpp
+    src/ui/TransportBarComponent.cpp
+    src/ui/ArrangementView.cpp)
 
 target_compile_features(daw_ui PUBLIC cxx_std_20)
 target_link_libraries(daw_ui PUBLIC daw_core)
@@ -280,7 +282,8 @@ if(DAW_BUILD_TESTS)
     if(APPLE)
         add_executable(daw_ui_tests
             tests/TestMain.cpp
-            tests/ui/TimelineSnapshotTest.cpp)
+            tests/ui/TimelineSnapshotTest.cpp
+            tests/ui/ClipGestureTest.cpp)
 
         target_include_directories(daw_ui_tests PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/tests")

@@ -47,6 +47,15 @@ void setClipLength (te::Clip& clip, double newLengthSecs)
     clip.setLength (tracktion::TimeDuration::fromSeconds (newLengthSecs), /*preserveSync*/ false);
 }
 
+void trimClipLeftTo (te::Clip& clip, double newStartSecs)
+{
+    beginGesture (clip, "Trim clip start");
+    // preserveSync=true keeps the source material fixed to the timeline, keepLength=false
+    // lets the length change, so dragging the left edge reveals less/more of the start.
+    clip.setStart (tracktion::TimePosition::fromSeconds (newStartSecs),
+                   /*preserveSync*/ true, /*keepLength*/ false);
+}
+
 void setClipOffset (te::Clip& clip, double newOffsetSecs)
 {
     beginGesture (clip, "Set clip offset");

@@ -42,6 +42,11 @@ void moveClip (tracktion::engine::Clip&, double newStartSecs);
 /** Sets the clip's length (trim the right edge), keeping its start and source offset. */
 void setClipLength (tracktion::engine::Clip&, double newLengthSecs);
 
+/** Trims the left edge to `newStartSecs`: moves the start while keeping the source aligned
+    to the timeline (so the clip reveals less/more of its beginning), shortening/lengthening
+    the clip — i.e. setStart(newStart, preserveSync=true, keepLength=false). */
+void trimClipLeftTo (tracktion::engine::Clip&, double newStartSecs);
+
 /** Sets the clip's source offset — which part of the file plays at the clip's start. */
 void setClipOffset (tracktion::engine::Clip&, double newOffsetSecs);
 

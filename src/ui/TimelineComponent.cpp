@@ -36,7 +36,7 @@ void TimelineComponent::rebuildClips()
         {
             if (auto* wave = dynamic_cast<te::WaveAudioClip*> (clip))
             {
-                auto* cc = clips.add (new ClipComponent (edit, *wave));
+                auto* cc = clips.add (new ClipComponent (edit, *wave, viewModel));
                 clipTrackIndex.add (ti);
                 addAndMakeVisible (cc);
             }

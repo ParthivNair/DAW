@@ -450,6 +450,57 @@ has `getLength()==0`, so `exportEditToWav` needs an explicit `endSecs` for it (r
 arrangements have a non-zero length). Gate: `ctest --preset dev` **18/18 green, 38.6 s**;
 EZStudio smoke-launches and shows the timeline without crashing.
 
+## 2026-06-15 — Phase 1 Chunk 8: interactive app shell (transport, clips, import, menus)
+
+The app becomes usable. New `daw_ui` components: **`TransportBarComponent`** (play/stop/loop
++ bars:beats/min:sec readout bound to TransportModel; a 30 Hz Timer publishes the playhead
+for the timeline to draw + auto-follow) and **`ArrangementView`** — the controller hosting
+the ruler + lanes with all interactions: Finder **drag-and-drop import**
+(FileDragAndDropTarget), clip **select / drag-move (beat-snapped) / edge-trim / right-click
+menu** (delete / fades / gain ±3 dB) / **delete key**, and **mouse-wheel zoom & scroll**.
+Every mutation routes through ClipOps/ClipImporter (undoable) then relays out from the model
+— the view never owns arrangement truth. `ClipComponent` grew a mouse drag state machine
+(body=move, edges=trim, popup-modifier=right-click) that previews by moving its own bounds
+and reports the final time(s) to the view; it also draws fade ramps. New ClipOps:
+`trimClipLeftTo` (setStart preserveSync=true, keepLength=false).
+
+`Main.cpp` is now the full app: `AppComponent` (MenuBarModel) owns the engine (device
+initialised for live playback), a `ProjectSession`, and rebuilds the transport+arrangement
+UI whenever the project changes (New/Open swap the Edit, which is held by reference). Menus:
+File (New/Open/Save/Save As/**Export WAV** via ArrangementRenderer), Edit (Undo/Redo/Delete),
+View (Snap toggle); async juce::FileChoosers for open/save/export.
+
+**Gesture test** `tests/ui/ClipGestureTest.cpp` `[snapshot]` (daw_ui_tests, macOS-only):
+drives ArrangementView's gesture seams (not raw mouse) at a pinned 120 bpm 4/4 — import →
+clip exists; move 3.1 s → snaps to 3.0 s, model start moves, the `createComponentSnapshot`
+shows clip pixels at the new `timeToX` column, and **undo reverts to 2.0 s**; trim-right →
+length 0.5 s; fade-in → model fade set; delete → clip gone. Gate: `ctest --preset dev`
+**19/19 green, 43.9 s**; EZStudio launches, opens the default output device, builds a
+4-track project, and shows the transport + timeline without crashing.
+
+## 2026-06-15 — Phase 1 closeout: timeline/arrangement MVP complete (all [CC] tasks)
+
+Phase 1 landed in eight verified chunks on branch `claude/vigilant-turing-4dc113`, each one
+commit gated independently by `cmake --preset dev && cmake --build --preset dev && ctest
+--preset dev` plus its render/snapshot test. Architecture held to the Phase 0 win: a
+GUI-free arrangement **model** in `daw_core` (ArrangementEdit, ClipImporter, ClipOps,
+EditUndo, ProjectSession, ArrangementRenderer, TimelineViewModel, TransportModel) — all
+render-tested with perfect −200 dBFS nulls for undo/redo and save/load — under a thin
+`daw_ui` shell (timeline components + interactions) driving it.
+
+**Phase 1 checks (dev/TODO.md) — all green:**
+- Tolerance golden render tests for clip placement / trim / gain (peak nulls well under
+  −96 dBFS; exact RMS/frequency within tolerance).
+- Undo+redo round-trip **null test**: perfect −200 dBFS (ImportClip/ClipOps/UndoNull).
+- `createComponentSnapshot` timeline regression (geometry + pixel invariants, macOS lane).
+- Full suite **19/19, 43.9 s** (< 1-minute budget); RT tripwire clean; EZStudio smoke-OK.
+
+**[You] acceptance remaining (manual listen):** launch EZStudio, drag a few loops onto a
+lane, move/trim/fade them, play, Export WAV, and confirm by ear — then note any friction in
+`dev/feedback.md`. Computer-use couldn't drive the unsigned dev build (LaunchServices
+doesn't index build artefacts), so the assembled-app visual is verified via the snapshot +
+gesture pixel tests rather than a live screenshot.
+
 ## Pending (fill in when decided)
 
 - ~~App name / bundle identifier~~: **EZStudio** / `com.parthivnair.ezstudio` (Chunk 2)

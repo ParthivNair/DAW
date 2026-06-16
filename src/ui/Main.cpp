@@ -2,66 +2,266 @@
 
 #include <tracktion_engine/tracktion_engine.h>
 
-#include "engine/ArrangementEdit.h"
+#include "engine/ArrangementRenderer.h"
+#include "engine/EditUndo.h"
 #include "engine/EngineInfo.h"
+#include "engine/ProjectSession.h"
 #include "engine/TimelineViewModel.h"
-#include "ui/TimeRulerComponent.h"
-#include "ui/TimelineComponent.h"
+#include "engine/TransportModel.h"
+#include "ui/ArrangementView.h"
+#include "ui/TransportBarComponent.h"
 
 namespace te = tracktion::engine;
 
 namespace daw
 {
 //==============================================================================
-/** Phase 1 timeline shell: a headless arrangement Edit shown through the daw_ui
-    timeline components (ruler + track lanes + playhead). Transport, menus, drag-drop
-    import and clip interactions arrive in Chunk 8; this chunk proves the components
-    render in the real app over a real Edit. */
-class MainComponent final : public juce::Component
+/** Phase 1 timeline app: a transport bar over the arrangement editor, with a File/Edit/
+    View menu wired to ProjectSession (new/open/save), ArrangementRenderer (export),
+    EditUndo, and the arrangement's clip gestures. Drag audio from Finder onto a lane to
+    import; drag clips to move, drag their edges to trim, right-click for fades/gain/delete;
+    Play to hear it through the default output. */
+class AppComponent final : public juce::Component,
+                           public juce::MenuBarModel
 {
 public:
-    MainComponent()
+    AppComponent()
     {
         engine = std::make_unique<te::Engine> ("EZStudio");
-        edit   = buildArrangementEdit (*engine, 4, EditPurpose::livePlayback);
+        engine->getDeviceManager().initialise(); // live playback through the default device
 
-        viewModel.setVisibleTimeRange (0.0, 16.0);
+        menuBar = std::make_unique<juce::MenuBarComponent> (this);
+        addAndMakeVisible (*menuBar);
 
-        ruler    = std::make_unique<TimeRulerComponent> (*edit, viewModel);
-        timeline = std::make_unique<TimelineComponent> (*edit, viewModel);
+        session = std::make_unique<ProjectSession> (*engine);
+        newProject();
 
-        addAndMakeVisible (*ruler);
-        addAndMakeVisible (*timeline);
-
-        setSize (1000, 600);
+        setSize (1100, 680);
     }
 
-    ~MainComponent() override
+    ~AppComponent() override
     {
-        timeline = nullptr;
-        ruler    = nullptr;
-        edit     = nullptr;
-        engine   = nullptr;
+        teardownUI();
+        session = nullptr;
+        if (engine != nullptr)
+            engine->getDeviceManager().closeDevices();
+        engine = nullptr;
     }
 
+    //== Layout ==============================================================
     void resized() override
     {
         auto r = getLocalBounds();
-        viewModel.setWidthPixels (r.getWidth());
-        ruler->setBounds (r.removeFromTop (24));
-        timeline->setBounds (r);
-        ruler->repaint();
-        timeline->relayout();
+        menuBar->setBounds (r.removeFromTop (24));
+        if (transportBar != nullptr)
+            transportBar->setBounds (r.removeFromTop (40));
+        if (arrangement != nullptr)
+            arrangement->setBounds (r);
+    }
+
+    //== MenuBarModel ========================================================
+    juce::StringArray getMenuBarNames() override { return { "File", "Edit", "View" }; }
+
+    juce::PopupMenu getMenuForIndex (int index, const juce::String&) override
+    {
+        juce::PopupMenu m;
+        if (index == 0) // File
+        {
+            m.addItem (newId, "New");
+            m.addItem (openId, "Open...");
+            m.addSeparator();
+            m.addItem (saveId, "Save");
+            m.addItem (saveAsId, "Save As...");
+            m.addSeparator();
+            m.addItem (exportId, "Export WAV...");
+        }
+        else if (index == 1) // Edit
+        {
+            m.addItem (undoId, "Undo", arrangement != nullptr && canUndo (*session->edit()));
+            m.addItem (redoId, "Redo", arrangement != nullptr && canRedo (*session->edit()));
+            m.addSeparator();
+            m.addItem (deleteId, "Delete Clip",
+                       arrangement != nullptr && arrangement->selectedClip() != nullptr);
+        }
+        else if (index == 2) // View
+        {
+            m.addItem (snapId, "Snap to beat", true, arrangement != nullptr && arrangement->isSnapEnabled());
+        }
+        return m;
+    }
+
+    void menuItemSelected (int itemId, int) override
+    {
+        switch (itemId)
+        {
+            case newId:
+                newProject();
+                break;
+            case openId:
+                chooseOpen();
+                break;
+            case saveId:
+                doSave();
+                break;
+            case saveAsId:
+                chooseSaveAs();
+                break;
+            case exportId:
+                chooseExport();
+                break;
+            case undoId:
+                if (arrangement)
+                {
+                    undo (*session->edit());
+                    arrangement->rebuild();
+                }
+                break;
+            case redoId:
+                if (arrangement)
+                {
+                    redo (*session->edit());
+                    arrangement->rebuild();
+                }
+                break;
+            case deleteId:
+                if (arrangement)
+                    arrangement->deleteSelected();
+                break;
+            case snapId:
+                if (arrangement)
+                    arrangement->setSnapEnabled (! arrangement->isSnapEnabled());
+                break;
+            default:
+                break;
+        }
     }
 
 private:
-    std::unique_ptr<te::Engine> engine;
-    std::unique_ptr<te::Edit> edit;
-    TimelineViewModel viewModel;
-    std::unique_ptr<TimeRulerComponent> ruler;
-    std::unique_ptr<TimelineComponent> timeline;
+    enum MenuIds
+    {
+        newId = 1,
+        openId,
+        saveId,
+        saveAsId,
+        exportId,
+        undoId,
+        redoId,
+        deleteId,
+        snapId
+    };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
+    void teardownUI()
+    {
+        arrangement    = nullptr;
+        transportBar   = nullptr;
+        transportModel = nullptr;
+    }
+
+    void buildUI()
+    {
+        auto* edit = session->edit();
+        jassert (edit != nullptr);
+
+        viewModel.setVisibleTimeRange (0.0, 16.0);
+
+        transportModel = std::make_unique<TransportModel> (*edit);
+        transportBar   = std::make_unique<TransportBarComponent> (*transportModel);
+        arrangement    = std::make_unique<ArrangementView> (*edit, viewModel);
+
+        transportBar->onPlayheadMoved = [this] (double secs, bool playing)
+        {
+            if (arrangement != nullptr)
+                arrangement->setPlayheadSecs (secs, playing);
+        };
+        arrangement->onEdited = [this]
+        { updateWindowTitle(); };
+
+        addAndMakeVisible (*transportBar);
+        addAndMakeVisible (*arrangement);
+        resized();
+        updateWindowTitle();
+    }
+
+    void newProject()
+    {
+        teardownUI();
+        session->newProject (juce::File::createTempFile ("tracktionedit"), 4);
+        buildUI();
+    }
+
+    void chooseOpen()
+    {
+        chooser = std::make_unique<juce::FileChooser> ("Open project", juce::File(), "*.tracktionedit");
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [this] (const juce::FileChooser& fc)
+                              {
+                                  const auto f = fc.getResult();
+                                  if (f == juce::File())
+                                      return;
+                                  teardownUI();
+                                  session->openProject (f);
+                                  buildUI();
+                              });
+    }
+
+    void doSave()
+    {
+        if (session->file().existsAsFile())
+            session->save();
+        else
+            chooseSaveAs();
+    }
+
+    void chooseSaveAs()
+    {
+        chooser = std::make_unique<juce::FileChooser> ("Save project as", juce::File(), "*.tracktionedit");
+        chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                              [this] (const juce::FileChooser& fc)
+                              {
+                                  auto f = fc.getResult();
+                                  if (f == juce::File())
+                                      return;
+                                  if (! f.hasFileExtension ("tracktionedit"))
+                                      f = f.withFileExtension ("tracktionedit");
+                                  session->saveAs (f);
+                                  updateWindowTitle();
+                              });
+    }
+
+    void chooseExport()
+    {
+        chooser = std::make_unique<juce::FileChooser> ("Export WAV", juce::File(), "*.wav");
+        chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                              [this] (const juce::FileChooser& fc)
+                              {
+                                  auto f = fc.getResult();
+                                  if (f == juce::File() || session->edit() == nullptr)
+                                      return;
+                                  if (! f.hasFileExtension ("wav"))
+                                      f = f.withFileExtension ("wav");
+                                  exportEditToWav (*session->edit(), f);
+                              });
+    }
+
+    void updateWindowTitle()
+    {
+        if (auto* w = findParentComponentOfClass<juce::DocumentWindow>())
+        {
+            const auto name = session->file().getFileNameWithoutExtension();
+            w->setName ("EZStudio - " + (name.isEmpty() ? juce::String ("Untitled") : name) + (session->hasUnsavedChanges() ? " *" : ""));
+        }
+    }
+
+    std::unique_ptr<te::Engine> engine;
+    std::unique_ptr<ProjectSession> session;
+    TimelineViewModel viewModel;
+    std::unique_ptr<TransportModel> transportModel;
+    std::unique_ptr<juce::MenuBarComponent> menuBar;
+    std::unique_ptr<TransportBarComponent> transportBar;
+    std::unique_ptr<ArrangementView> arrangement;
+    std::unique_ptr<juce::FileChooser> chooser;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppComponent)
 };
 
 //==============================================================================
@@ -73,7 +273,7 @@ public:
     {
         setUsingNativeTitleBar (true);
         setResizable (true, false);
-        setContentOwned (new MainComponent(), true);
+        setContentOwned (new AppComponent(), true);
         centreWithSize (getWidth(), getHeight());
         setVisible (true);
     }
@@ -102,7 +302,6 @@ public:
     }
 
     void shutdown() override { mainWindow = nullptr; }
-
     void systemRequestedQuit() override { quit(); }
 
 private:
